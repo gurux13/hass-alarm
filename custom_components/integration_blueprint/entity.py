@@ -17,4 +17,3 @@ class IntegrationBlueprintEntity(Entity):
     def __init__(self) -> None:
         """Initialize."""
         super().__init__()
-        self._attr_unique_id = self.entity_id

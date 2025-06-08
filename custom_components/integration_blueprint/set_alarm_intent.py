@@ -14,7 +14,6 @@ class SetAlarmIntent(intent.IntentHandler):
     description = "Sets an alarm"
     slot_schema = {
         vol.Required(vol.Any("hours", "minutes", "seconds")): cv.positive_int,
-        vol.Optional("name"): cv.string,
         vol.Optional("conversation_command"): cv.string,
     }  # type: ignore
 

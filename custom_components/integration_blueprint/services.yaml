@@ -1,0 +1,13 @@
+# Describes the services provided by the Integration Blueprint integration
+
+add_alarm:
+  name: Add Alarm
+  description: Adds a new alarm.
+  fields:
+    datetime:
+      name: Alarm Datetime
+      description: The date and time for the alarm (e.g., "YYYY-MM-DD HH:MM:SS" or ISO 8601 format).
+      required: true
+      example: "2024-07-15T08:00:00"
+      selector:
+        datetime:
