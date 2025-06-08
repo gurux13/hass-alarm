@@ -6,3 +6,5 @@ LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "integration_blueprint"
 ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
+HOME_LLM_API_ID = "hass_alarm_llm"
+SERVICE_TOOL_NAME = "HassAlarmTool"

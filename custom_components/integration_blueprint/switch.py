@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .entity import IntegrationBlueprintEntity
 
@@ -17,8 +18,8 @@ if TYPE_CHECKING:
 
 ENTITY_DESCRIPTIONS = (
     SwitchEntityDescription(
-        key="integration_blueprint",
-        name="Integration Switch",
+        key="alarms_enabled",
+        name="Alarms enabled",
         icon="mdi:format-quote-close",
     ),
 )
@@ -39,7 +40,9 @@ async def async_setup_entry(
     )
 
 
-class IntegrationBlueprintSwitch(IntegrationBlueprintEntity, SwitchEntity):
+class IntegrationBlueprintSwitch(
+    IntegrationBlueprintEntity, SwitchEntity, RestoreEntity
+):
     """integration_blueprint switch class."""
 
     def __init__(
@@ -50,18 +53,25 @@ class IntegrationBlueprintSwitch(IntegrationBlueprintEntity, SwitchEntity):
         """Initialize the switch class."""
         super().__init__(coordinator)
         self.entity_description = entity_description
+        self._state = True
+
+    async def async_added_to_hass(self) -> None:
+        state = await self.async_get_last_state()
+        if state is not None and state.state in ("on", "off"):
+            self._state = state.state == "on"
+        else:
+            self._state = True
+        await super().async_added_to_hass()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        self._state = True
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self._state = False
+        await self.coordinator.async_request_refresh()
 
     @property
     def is_on(self) -> bool:
         """Return true if the switch is on."""
-        return self.coordinator.data.get("title", "") == "foo"
-
-    async def async_turn_on(self, **_: Any) -> None:
-        """Turn on the switch."""
-        await self.coordinator.config_entry.runtime_data.client.async_set_title("bar")
-        await self.coordinator.async_request_refresh()
-
-    async def async_turn_off(self, **_: Any) -> None:
-        """Turn off the switch."""
-        await self.coordinator.config_entry.runtime_data.client.async_set_title("foo")
-        await self.coordinator.async_request_refresh()
+        return self._state
