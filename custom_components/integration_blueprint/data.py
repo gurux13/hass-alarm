@@ -9,8 +9,6 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
 
-    from .coordinator import BlueprintDataUpdateCoordinator
-
 
 type IntegrationBlueprintConfigEntry = ConfigEntry[IntegrationBlueprintData]
 
@@ -19,5 +17,4 @@ type IntegrationBlueprintConfigEntry = ConfigEntry[IntegrationBlueprintData]
 class IntegrationBlueprintData:
     """Data for the Blueprint integration."""
 
-    coordinator: BlueprintDataUpdateCoordinator
     integration: Integration

@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .coordinator import BlueprintDataUpdateCoordinator
     from .data import IntegrationBlueprintConfigEntry
 
 ENTITY_DESCRIPTIONS = (
@@ -33,7 +32,6 @@ async def async_setup_entry(
     """Set up the switch platform."""
     async_add_entities(
         IntegrationBlueprintSwitch(
-            coordinator=entry.runtime_data.coordinator,
             entity_description=entity_description,
         )
         for entity_description in ENTITY_DESCRIPTIONS
@@ -47,11 +45,10 @@ class IntegrationBlueprintSwitch(
 
     def __init__(
         self,
-        coordinator: BlueprintDataUpdateCoordinator,
         entity_description: SwitchEntityDescription,
     ) -> None:
         """Initialize the switch class."""
-        super().__init__(coordinator)
+        super().__init__()
         self.entity_description = entity_description
         self._state = True
 
@@ -61,15 +58,16 @@ class IntegrationBlueprintSwitch(
             self._state = state.state == "on"
         else:
             self._state = True
+        self.async_write_ha_state()
         await super().async_added_to_hass()
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         self._state = True
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._state = False
-        await self.coordinator.async_request_refresh()
+        self.async_write_ha_state()
 
     @property
     def is_on(self) -> bool:
