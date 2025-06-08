@@ -18,3 +18,4 @@ class IntegrationBlueprintData:
     """Data for the Blueprint integration."""
 
     integration: Integration
+    alarms: list[str] | None = None

@@ -52,6 +52,7 @@ class IntegrationBlueprintSwitch(
         self.entity_description = entity_description
         self._state = True
 
+
     async def async_added_to_hass(self) -> None:
         state = await self.async_get_last_state()
         if state is not None and state.state in ("on", "off"):
@@ -63,10 +64,12 @@ class IntegrationBlueprintSwitch(
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         self._state = True
+        self.hass.states.async_set(self.entity_id, "on")
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         self._state = False
+        self.hass.states.async_set(self.entity_id, "off")
         self.async_write_ha_state()
 
     @property
