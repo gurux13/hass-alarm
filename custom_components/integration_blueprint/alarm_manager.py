@@ -78,7 +78,8 @@ class AlarmManager:
                 if parsed_datetime_raw.tzinfo is None:
                     LOGGER.warning(
                         "Loaded alarm datetime '%s' for number %s is naive, assuming it was stored as UTC.",
-                        alarm_raw["datetime"], alarm_raw["number"]
+                        alarm_raw["datetime"],
+                        alarm_raw["number"],
                     )
                     parsed_datetime = parsed_datetime_raw.replace(tzinfo=dt_util.UTC)
                 else:
@@ -102,9 +103,16 @@ class AlarmManager:
 
     def get_next_alarm_number(self) -> int:
         """Determine the next available alarm number."""
+        if not self._free_alarm_numbers:
+            # If no free numbers, return the next number after the highest existing one
+            return self._get_next_alarm_number_after_highest()
+        return min(self._free_alarm_numbers)
+
+    def _get_next_alarm_number_after_highest(self) -> int:
+        """Determine the next available alarm number after the highest existing one."""
         if not self._alarms:
             return 1
-        return max(alarm["number"] for alarm in self._alarms) + 1
+        return max(alarm["number"] for alarm in self._alarms)
 
     @callback
     def add_alarm(self, alarm_number: int, alarm_datetime: datetime) -> None:

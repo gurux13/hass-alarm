@@ -42,7 +42,6 @@ if TYPE_CHECKING:
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
-    Platform.BINARY_SENSOR,
     Platform.SWITCH,
 ]
 
@@ -196,7 +195,7 @@ async def async_setup_entry(
         utc_alarm_datetime_obj = dt_util.as_utc(local_alarm_datetime_obj)
 
         LOGGER.info(
-            "Service call to add alarm: DateTime='%s' for entry %s",
+            "Service call to add alarm: DateTime='%s' (UTC %s) for entry %s",
             local_alarm_datetime_obj.isoformat(),
             utc_alarm_datetime_obj.isoformat(),
             entry.entry_id,
