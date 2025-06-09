@@ -26,11 +26,24 @@ class AlarmManager:
         self._entry_id = entry_id
         # _alarms stores {"number": int, "datetime_obj": datetime}
         self._alarms: list[dict[str, Any]] = []
+        self._free_alarm_numbers: set[int] = set()  # Track free alarm numbers
 
         storage_key = STORAGE_KEY_ALARMS_FORMAT.format(entry_id=self._entry_id)
         self._store: Store[list[dict[str, Any]]] = Store(
             hass, STORAGE_VERSION, storage_key
         )
+
+    def recalculate_free_alarm_numbers(self) -> None:
+        """Recalculate the set of free alarm numbers based on current alarms."""
+        if not self._alarms:
+            self._free_alarm_numbers = set()
+        else:
+            used_numbers = {alarm["number"] for alarm in self._alarms}
+            self._free_alarm_numbers = {
+                num
+                for num in range(1, max(used_numbers) + 1)
+                if num not in used_numbers
+            }
 
     async def async_load_alarms(self) -> None:
         """Load alarms from the store."""
@@ -52,12 +65,24 @@ class AlarmManager:
                     )
                     continue
 
-                parsed_datetime = dt_util.parse_datetime(alarm_raw["datetime"])
-                if parsed_datetime is None:
+                # Ensure the loaded datetime is UTC
+                # dt_util.parse_datetime will return a tz-aware datetime if the string has tz info
+                # or naive if it doesn't. We assume naive datetimes from storage were UTC.
+                parsed_datetime_raw = dt_util.parse_datetime(alarm_raw["datetime"])
+                if parsed_datetime_raw is None:
                     LOGGER.warning(
                         "Could not parse datetime string for alarm: %s", alarm_raw
                     )
                     continue
+
+                if parsed_datetime_raw.tzinfo is None:
+                    LOGGER.warning(
+                        "Loaded alarm datetime '%s' for number %s is naive, assuming it was stored as UTC.",
+                        alarm_raw["datetime"], alarm_raw["number"]
+                    )
+                    parsed_datetime = parsed_datetime_raw.replace(tzinfo=dt_util.UTC)
+                else:
+                    parsed_datetime = dt_util.as_utc(parsed_datetime_raw)
 
                 loaded_alarms.append(
                     {"number": alarm_raw["number"], "datetime_obj": parsed_datetime}
@@ -66,6 +91,7 @@ class AlarmManager:
                 LOGGER.warning("Could not parse stored alarm %s: %s", alarm_raw, ex)
 
         self._alarms = sorted(loaded_alarms, key=lambda x: x["number"])
+        self.recalculate_free_alarm_numbers()
         LOGGER.debug(
             "Loaded %s alarms for %s from store", len(self._alarms), self._entry_id
         )
@@ -92,12 +118,36 @@ class AlarmManager:
 
         self._alarms.append({"number": alarm_number, "datetime_obj": alarm_datetime})
         self._alarms.sort(key=lambda x: x["number"])  # Keep sorted by number
+        if alarm_number in self._free_alarm_numbers:
+            self._free_alarm_numbers.remove(alarm_number)
         LOGGER.debug(
             "Alarm %s added to manager. Total alarms: %s. Scheduling save.",
             alarm_number,
             len(self._alarms),
         )
         self.hass.async_create_task(self._async_save_alarms_to_store())
+
+    @callback
+    def delete_alarm(self, alarm_number: int) -> bool:
+        """Delete an alarm by its number, update internal list, and schedule save."""
+        initial_alarm_count = len(self._alarms)
+        self._alarms = [
+            alarm for alarm in self._alarms if alarm["number"] != alarm_number
+        ]
+
+        if len(self._alarms) < initial_alarm_count:
+            LOGGER.debug(
+                "Alarm %s removed from manager. Total alarms: %s. Scheduling save.",
+                alarm_number,
+                len(self._alarms),
+            )
+            self._free_alarm_numbers.add(alarm_number)
+            self.hass.async_create_task(self._async_save_alarms_to_store())
+            return True
+        LOGGER.warning(
+            "Attempted to delete non-existent alarm number %s.", alarm_number
+        )
+        return False
 
     async def _async_save_alarms_to_store(self) -> None:
         """Save the current list of alarms to the store."""

@@ -11,3 +11,18 @@ add_alarm:
       example: "2024-07-15T08:00:00"
       selector:
         datetime:
+delete_alarm:
+  target:
+  name: Delete Alarm
+  description: Deletes an existing alarm.
+delete_alarm_by_number:
+  name: Delete Alarm by Number
+  description: Deletes an existing alarm by its number.
+  fields:
+    alarm_number:
+      name: Alarm Number
+      description: The number of the alarm to delete.
+      required: true
+      example: 42
+      selector:
+        number:
