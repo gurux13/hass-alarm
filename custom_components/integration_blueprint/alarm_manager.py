@@ -11,6 +11,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
+    HASS_DATA_ALARM_MANAGER,
     LOGGER,
     STORAGE_KEY_ALARMS_FORMAT,
     STORAGE_VERSION,
@@ -19,6 +20,11 @@ from .const import (
 
 class AlarmManager:
     """Manages loading, saving, and accessing alarm data."""
+
+    @classmethod
+    def get_instance(cls, hass: HomeAssistant) -> AlarmManager | None:
+        """Get the AlarmManager instance for the given Home Assistant instance."""
+        return hass.data.get(HASS_DATA_ALARM_MANAGER)
 
     def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
         """Initialize the Alarm Manager."""
@@ -112,7 +118,7 @@ class AlarmManager:
         """Determine the next available alarm number after the highest existing one."""
         if not self._alarms:
             return 1
-        return max(alarm["number"] for alarm in self._alarms)
+        return max(alarm["number"] for alarm in self._alarms) + 1
 
     @callback
     def add_alarm(self, alarm_number: int, alarm_datetime: datetime) -> None:

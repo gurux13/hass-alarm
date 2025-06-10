@@ -26,3 +26,5 @@ STORAGE_VERSION = 1
 STORAGE_KEY_ALARMS_FORMAT = (
     f"{DOMAIN}_alarms_{{entry_id}}"  # To be formatted with entry.entry_id
 )
+
+HASS_DATA_ALARM_MANAGER = f"{DOMAIN}_alarm_manager"

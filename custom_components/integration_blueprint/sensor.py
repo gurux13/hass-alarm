@@ -26,6 +26,7 @@ from .const import (
     LOGGER,
     SIGNAL_DELETE_ALARM,
     SIGNAL_ADD_ALARM,
+    HASS_DATA_ALARM_MANAGER,
 )
 from .entity import IntegrationBlueprintEntity
 
@@ -47,7 +48,15 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
+    if HASS_DATA_ALARM_MANAGER in hass.data:
+        LOGGER.error(
+            "AlarmManager already initialized for entry %s. Skipping setup.",
+            entry.entry_id,
+        )
+        return
     alarm_manager = AlarmManager(hass, entry.entry_id)
+    hass.data[HASS_DATA_ALARM_MANAGER] = alarm_manager
+
     await alarm_manager.async_load_alarms()
 
     # Initialize storage for scheduled alarm trigger removers
