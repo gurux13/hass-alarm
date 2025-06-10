@@ -21,6 +21,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.util import dt as dt_util
 
+from custom_components.integration_blueprint.get_alarms_intent import GetAlarmsIntent
+
 from .const import (
     ATTR_ALARM_DATETIME,
     ATTR_ALARM_NUMBER,
@@ -34,6 +36,7 @@ from .const import (
 )
 from .data import IntegrationBlueprintData
 from .set_alarm_intent import SetAlarmIntent
+from .get_alarms_intent import GetAlarmsIntent
 
 if TYPE_CHECKING:
     from homeassistant.helpers.typing import ConfigType
@@ -186,6 +189,7 @@ async def async_setup_entry(
     )
 
     intent.async_register(hass, SetAlarmIntent())
+    intent.async_register(hass, GetAlarmsIntent())
 
     # Define the service handler for adding an alarm
     async def async_handle_add_alarm_service(service_call: ServiceCall) -> None:

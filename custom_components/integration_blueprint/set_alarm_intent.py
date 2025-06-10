@@ -58,7 +58,7 @@ class SetAlarmIntent(intent.IntentHandler):
         ):
             msg = "Alarm time must be in the future."
             raise intent.IntentError(msg)
-        await hass.services.async_call(
+        result = await hass.services.async_call(
             DOMAIN,
             SERVICE_ADD_ALARM,
             {
@@ -66,6 +66,7 @@ class SetAlarmIntent(intent.IntentHandler):
             },
             blocking=True,  # Wait for the service call to complete
         )
+        
 
         response = intent_obj.create_response()
         response.async_set_speech(
