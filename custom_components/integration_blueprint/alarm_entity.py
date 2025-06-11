@@ -66,6 +66,11 @@ class AlarmEntity(IntegrationBlueprintEntity, SensorEntity):
         )
 
     @property
+    def alarm_number(self) -> int:
+        """Return the alarm number for this entity."""
+        return self._alarm_number
+
+    @property
     def native_value(self) -> datetime:
         """Return the state of the sensor (the alarm time in ISO format)."""
         return self._alarm_at  # This is already UTC

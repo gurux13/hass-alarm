@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import datetime, UTC
+from typing import Any, Callable
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .alarm_entity import AlarmEntity  # Added
 from .const import (
     DOMAIN,
+    EVENT_ALARM_TRIGGERED,
     HASS_DATA_ALARM_MANAGER,
     LOGGER,
     STORAGE_KEY_ALARMS_FORMAT,
     STORAGE_VERSION,
 )
+from .data import IntegrationBlueprintConfigEntry  # Added
 
 
 class AlarmManager:
@@ -26,18 +30,63 @@ class AlarmManager:
         """Get the AlarmManager instance for the given Home Assistant instance."""
         return hass.data.get(HASS_DATA_ALARM_MANAGER)
 
-    def __init__(self, hass: HomeAssistant, entry_id: str) -> None:
+    @classmethod
+    def execute_on_instance(
+        cls, hass: HomeAssistant, func: Callable
+    ) -> tuple[bool, Any]:
+        """
+        Execute a function on the AlarmManager instance if it exists.
+
+        Returns a tuple (success: bool, result: Any).
+        """
+        instance = cls.get_instance(hass)
+        if instance is None:
+            return False, None
+        result = func(instance)
+        return True, result
+
+    @classmethod
+    async def execute_on_instance_async(
+        cls, hass: HomeAssistant, func: Callable[[AlarmManager], Any]
+    ) -> tuple[bool, Any]:
+        """
+        Execute an async function on the AlarmManager instance if it exists.
+
+        Returns a tuple (success: bool, result: Any).
+        """
+        instance = cls.get_instance(hass)
+        if instance is None:
+            return False, None
+        result = await func(instance)
+        return True, result
+
+    def save_instance(self, hass: HomeAssistant) -> None:
+        """Save the AlarmManager instance to the Home Assistant data."""
+        hass.data[HASS_DATA_ALARM_MANAGER] = self
+
+    def __init__(
+        self, hass: HomeAssistant, entry: IntegrationBlueprintConfigEntry
+    ) -> None:
         """Initialize the Alarm Manager."""
+        if HASS_DATA_ALARM_MANAGER in hass.data:
+            msg = (
+                f"AlarmManager already initialized for entry {entry.entry_id}. "
+                "Only one instance can be created per config entry."
+            )
+            raise RuntimeError(msg)
+        self.save_instance(hass)
         self.hass = hass
-        self._entry_id = entry_id
+        self._entry = entry
+        self._entry_id = entry.entry_id
         # _alarms stores {"number": int, "datetime_obj": datetime}
         self._alarms: list[dict[str, Any]] = []
-        self._free_alarm_numbers: set[int] = set()  # Track free alarm numbers
+        self._free_alarm_numbers: set[int] = set()
 
         storage_key = STORAGE_KEY_ALARMS_FORMAT.format(entry_id=self._entry_id)
         self._store: Store[list[dict[str, Any]]] = Store(
             hass, STORAGE_VERSION, storage_key
         )
+        self._entry.runtime_data.scheduled_alarm_triggers = {}
 
     def recalculate_free_alarm_numbers(self) -> None:
         """Recalculate the set of free alarm numbers based on current alarms."""
@@ -83,7 +132,7 @@ class AlarmManager:
 
                 if parsed_datetime_raw.tzinfo is None:
                     LOGGER.warning(
-                        "Loaded alarm datetime '%s' for number %s is naive, assuming it was stored as UTC.",
+                        "Loaded alarm datetime '%s' for number %s is tz-unknown, assuming it was stored as UTC.",
                         alarm_raw["datetime"],
                         alarm_raw["number"],
                     )
@@ -121,28 +170,162 @@ class AlarmManager:
         return max(alarm["number"] for alarm in self._alarms) + 1
 
     @callback
-    def add_alarm(self, alarm_number: int, alarm_datetime: datetime) -> None:
-        """Add an alarm, update internal list, and schedule save."""
+    def _create_alarm_data_and_persist(
+        self, alarm_datetime: datetime
+    ) -> dict[str, Any] | None:
+        """
+        Create data for a new alarm, assign a number, add it to internal list, and schedule save.
+
+        Returns the details (number, datetime_obj) of the created alarm data, or None if creation failed.
+        """
+        alarm_number = self.get_next_alarm_number()
+
+        if self.add_alarm_data(alarm_number, alarm_datetime):
+            LOGGER.debug(
+                "Alarm %s created in manager with datetime %s.",
+                alarm_number,
+                alarm_datetime.isoformat(),  # Log the input datetime for clarity
+            )
+            return {
+                "number": alarm_number,
+                "datetime_obj": alarm_datetime,
+            }
+        return None
+
+    @callback
+    def create_alarm(self, alarm_datetime_utc: datetime) -> AlarmEntity | None:
+        """
+        Create alarm e2e
+        """
+        created_alarm_data = self._create_alarm_data_and_persist(alarm_datetime_utc)
+
+        if created_alarm_data:
+            alarm_number = created_alarm_data["number"]
+            actual_alarm_datetime_utc = created_alarm_data["datetime_obj"]
+            alarm_entity = AlarmEntity(
+                self.hass, self._entry, alarm_number, actual_alarm_datetime_utc
+            )
+            self._async_schedule_alarm_event_trigger(
+                alarm_number, actual_alarm_datetime_utc
+            )
+            return alarm_entity
+        return None
+
+    def create_entities_for_loaded_alarms_and_schedule(self) -> list[AlarmEntity]:
+        """
+        Creates AlarmEntity instances for all loaded alarms and schedules their triggers.
+        Returns a list of created AlarmEntity instances.
+        """
+        created_entities: list[AlarmEntity] = []
+        for alarm_data in self.get_all_alarms_data():
+            alarm_entity = AlarmEntity(
+                self.hass,
+                self._entry,
+                alarm_data["number"],
+                alarm_data["datetime_obj"],
+            )
+            created_entities.append(alarm_entity)
+            self._async_schedule_alarm_event_trigger(
+                alarm_data["number"], alarm_data["datetime_obj"]
+            )
+        return created_entities
+
+    @callback
+    def _async_schedule_alarm_event_trigger(
+        self, alarm_number: int, alarm_datetime_utc: datetime
+    ) -> None:
+        """Schedule an event to be fired when the alarm time is reached."""
+
+        @callback
+        async def _fire_alarm_event_callback(_now: datetime) -> None:
+            """Callback executed when alarm time is reached."""
+            LOGGER.info(
+                "Alarm %s for entry %s triggered (scheduled for %s)",
+                alarm_number,
+                self._entry_id,
+                alarm_datetime_utc.isoformat(),
+            )
+            self.hass.bus.async_fire(
+                EVENT_ALARM_TRIGGERED,
+                {
+                    "config_entry_id": self._entry_id,
+                    "alarm_number": alarm_number,
+                    "alarm_datetime": alarm_datetime_utc.isoformat(),
+                },
+            )
+            await self.delete_alarm(alarm_number)  # Remove alarm after firing
+            if alarm_number in self._entry.runtime_data.scheduled_alarm_triggers:
+                del self._entry.runtime_data.scheduled_alarm_triggers[alarm_number]
+
+        if alarm_datetime_utc <= dt_util.utcnow():
+            LOGGER.debug(
+                "Alarm %s for entry %s is in the past (%s). Firing NOW.",
+                alarm_number,
+                self._entry_id,
+                alarm_datetime_utc.isoformat(),
+            )
+            # If the alarm time is in the past, fire immediately
+            self.hass.async_create_task(_fire_alarm_event_callback(dt_util.utcnow()))
+            return
+
+        LOGGER.debug(
+            "Scheduling event for alarm %s at %s (UTC)",
+            alarm_number,
+            alarm_datetime_utc.isoformat(),
+        )
+        unregister_listener = async_track_point_in_time(
+            self.hass, _fire_alarm_event_callback, alarm_datetime_utc
+        )
+        self._entry.runtime_data.scheduled_alarm_triggers[alarm_number] = (
+            unregister_listener
+        )
+
+    @callback
+    def add_alarm_data(self, alarm_number: int, alarm_datetime: datetime) -> bool:
+        """Add an alarm, update internal list, and schedule save. Returns True if successful."""
+        alarm_datetime_utc = alarm_datetime.astimezone(UTC)
+
         if any(alarm["number"] == alarm_number for alarm in self._alarms):
             LOGGER.warning(
                 "Attempted to add alarm with duplicate number %s. Skipping.",
                 alarm_number,
             )
-            return
+            return False
 
-        self._alarms.append({"number": alarm_number, "datetime_obj": alarm_datetime})
-        self._alarms.sort(key=lambda x: x["number"])  # Keep sorted by number
+        self._alarms.append(
+            {"number": alarm_number, "datetime_obj": alarm_datetime_utc}
+        )
         if alarm_number in self._free_alarm_numbers:
             self._free_alarm_numbers.remove(alarm_number)
         LOGGER.debug(
-            "Alarm %s added to manager. Total alarms: %s. Scheduling save.",
+            "Alarm %s (datetime: %s) added to manager. Total alarms: %s. Scheduling save.",
             alarm_number,
+            alarm_datetime_utc.isoformat(),
             len(self._alarms),
         )
         self.hass.async_create_task(self._async_save_alarms_to_store())
+        return True
 
     @callback
-    def delete_alarm(self, alarm_number: int) -> bool:
+    def _async_cancel_scheduled_alarm_trigger(self, alarm_number: int) -> None:
+        """Cancel a scheduled alarm event trigger."""
+        if alarm_number in self._entry.runtime_data.scheduled_alarm_triggers:
+            LOGGER.debug(
+                "Cancelling scheduled event for alarm %s for entry %s",
+                alarm_number,
+                self._entry_id,
+            )
+            # Call the unregister callback and remove from dict
+            self._entry.runtime_data.scheduled_alarm_triggers.pop(alarm_number)()
+        else:
+            LOGGER.debug(
+                "No scheduled event found for alarm %s (entry %s) to cancel.",
+                alarm_number,
+                self._entry_id,
+            )
+
+    @callback
+    async def delete_alarm(self, alarm_number: int) -> bool:
         """Delete an alarm by its number, update internal list, and schedule save."""
         initial_alarm_count = len(self._alarms)
         self._alarms = [
@@ -156,12 +339,37 @@ class AlarmManager:
                 len(self._alarms),
             )
             self._free_alarm_numbers.add(alarm_number)
+            self._async_cancel_scheduled_alarm_trigger(
+                alarm_number
+            )  # Cancel scheduled event
             self.hass.async_create_task(self._async_save_alarms_to_store())
+            entity_to_remove = self._entry.runtime_data.alarm_entities.pop(
+                alarm_number, None
+            )
+            if entity_to_remove:
+                LOGGER.debug("Removing alarm entity: %s", entity_to_remove.entity_id)
+                await entity_to_remove.async_remove()
+            else:
+                LOGGER.warning(
+                    "Alarm entity for number %s not found in runtime data for removal.",
+                    alarm_number,
+                )
             return True
         LOGGER.warning(
             "Attempted to delete non-existent alarm number %s.", alarm_number
         )
+
         return False
+
+    @callback
+    def async_cancel_all_scheduled_triggers(self) -> None:
+        """Cancel all scheduled alarm triggers for this manager's entry."""
+        LOGGER.debug(
+            "Cancelling all scheduled alarm triggers for entry %s", self._entry_id
+        )
+        # Iterate over a copy of keys as _async_cancel_scheduled_alarm_trigger modifies the dict
+        for alarm_num in list(self._entry.runtime_data.scheduled_alarm_triggers.keys()):
+            self._async_cancel_scheduled_alarm_trigger(alarm_num)
 
     async def _async_save_alarms_to_store(self) -> None:
         """Save the current list of alarms to the store."""

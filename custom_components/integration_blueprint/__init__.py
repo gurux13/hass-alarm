@@ -6,21 +6,27 @@ https://github.com/ludeeus/integration_blueprint
 """
 
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 import voluptuous as vol
 from homeassistant.const import ATTR_DEVICE_ID, ATTR_ENTITY_ID, Platform
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import (
     config_validation as cv,
+)
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import (
     entity_registry as er,
+)
+from homeassistant.helpers import (
     intent,
 )
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.loader import async_get_loaded_integration
-from homeassistant.helpers import device_registry as dr
-from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.util import dt as dt_util
 
+from custom_components.integration_blueprint.alarm_manager import AlarmManager
 from custom_components.integration_blueprint.get_alarms_intent import GetAlarmsIntent
 
 from .const import (
@@ -29,14 +35,14 @@ from .const import (
     DOMAIN,
     LOGGER,
     SERVICE_ADD_ALARM,
-    SIGNAL_ADD_ALARM,
-    SERVICE_DELETE_ALARM_BY_NUMBER,
     SERVICE_DELETE_ALARM,
+    SERVICE_DELETE_ALARM_BY_NUMBER,
+    SIGNAL_ADD_ALARM,
     SIGNAL_DELETE_ALARM,
 )
 from .data import IntegrationBlueprintData
-from .set_alarm_intent import SetAlarmIntent
 from .get_alarms_intent import GetAlarmsIntent
+from .set_alarm_intent import SetAlarmIntent
 
 if TYPE_CHECKING:
     from homeassistant.helpers.typing import ConfigType
@@ -105,6 +111,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     alarm_number = int(alarm_number_str)
                     alarm_details = {ATTR_ALARM_NUMBER: alarm_number}
                     delete_signal = f"{SIGNAL_DELETE_ALARM}_{config_entry_id}"
+                    await AlarmManager.execute_on_instance_async(
+                        hass,
+                        lambda am: (
+                            await am.delete_alarm(alarm_number) for _ in "_"
+                        ).__anext__(),
+                    )
                     async_dispatcher_send(hass, delete_signal, alarm_details)
                 except ValueError:
                     LOGGER.warning(
