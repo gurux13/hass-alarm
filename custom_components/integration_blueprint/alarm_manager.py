@@ -2,24 +2,144 @@
 
 from __future__ import annotations
 
-from datetime import datetime, UTC
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
+from homeassistant.components.sensor import (
+    SensorEntity,
+)
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers import entity_registry
 from homeassistant.util import dt as dt_util
 
 from .alarm_entity import AlarmEntity  # Added
 from .const import (
-    DOMAIN,
+    ATTR_ALARM_DATETIME,
     EVENT_ALARM_TRIGGERED,
     HASS_DATA_ALARM_MANAGER,
     LOGGER,
+    SIGNAL_ADD_ALARM,
+    SIGNAL_DELETE_ALARM,
     STORAGE_KEY_ALARMS_FORMAT,
     STORAGE_VERSION,
 )
 from .data import IntegrationBlueprintConfigEntry  # Added
+from .sensor import AllAlarmsSensor
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+    from .data import IntegrationBlueprintConfigEntry
+
+
+async def async_remove_entry(hass, entry) -> None:
+    if HASS_DATA_ALARM_MANAGER in hass.data:
+        del hass.data[HASS_DATA_ALARM_MANAGER]
+        LOGGER.debug(
+            "Removed alarm manager for %s.",
+            entry.entry_id,
+        )
+        return
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: IntegrationBlueprintConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the sensor platform."""
+    if HASS_DATA_ALARM_MANAGER in hass.data:
+        LOGGER.error(
+            "AlarmManager already initialized for entry %s. Skipping setup.",
+            entry.entry_id,
+        )
+        return
+    # Initialize AlarmManager with the full config entry
+    alarm_manager = AlarmManager(hass, entry)
+    hass.data[HASS_DATA_ALARM_MANAGER] = alarm_manager
+
+    await alarm_manager.async_load_alarms()
+
+    # Note: entry.runtime_data.scheduled_alarm_triggers is now initialized within AlarmManager's __init__
+    # Ensure alarm_entities dict exists in runtime_data for storing entity instances
+    entry.runtime_data.alarm_entities = {}
+
+    all_alarms_summary_sensor = AllAlarmsSensor(hass, entry, alarm_manager)
+
+    entities_to_add: list[SensorEntity] = [all_alarms_summary_sensor]
+
+    # Create AlarmEntity instances for loaded alarms and schedule their triggers via AlarmManager
+    loaded_alarm_entities = (
+        alarm_manager.create_entities_for_loaded_alarms_and_schedule()
+    )
+    for entity in loaded_alarm_entities:
+        entry.runtime_data.alarm_entities[entity.alarm_number] = entity
+    entities_to_add.extend(loaded_alarm_entities)
+
+    async_add_entities(entities_to_add)
+
+    @callback
+    def _async_handle_new_alarm_signal(alarm_details: dict[str, Any]) -> None:
+        """Handle the signal to add a new alarm from a service call.
+
+        This creates an individual AlarmEntity sensor, adds the alarm to the
+        AlarmManager (which handles persistence), and updates the summary sensor.
+        """
+        # This datetime is now guaranteed to be UTC from the __init__.py signal dispatch
+        alarm_datetime_utc: datetime = alarm_details[ATTR_ALARM_DATETIME]
+
+        # AlarmManager now handles data creation, persistence, entity object instantiation, and scheduling.
+        new_alarm_entity = alarm_manager.create_alarm(alarm_datetime_utc)
+
+        if new_alarm_entity is None:
+            LOGGER.error(
+                "Failed to create alarm entity via AlarmManager for datetime %s",
+                alarm_datetime_utc.isoformat(),
+            )
+            return
+
+        LOGGER.debug(
+            ("Sensor platform received new alarm entity: Number=%s, DateTime='%s'"),
+            new_alarm_entity.alarm_number,  # Accessing property from AlarmEntity
+            new_alarm_entity.native_value.isoformat(),  # Accessing property from AlarmEntity
+        )
+
+        # Add the entity to Home Assistant
+        async_add_entities([new_alarm_entity])
+        entry.runtime_data.alarm_entities[new_alarm_entity.alarm_number] = (
+            new_alarm_entity
+        )
+
+        # Update the summary sensor's state
+        all_alarms_summary_sensor.async_write_ha_state()
+
+    @callback
+    async def _async_handle_delete_alarm_signal(alarm_details: dict[str, Any]) -> None:
+        """Handle the signal to delete an alarm from a service call."""
+        all_alarms_summary_sensor.async_write_ha_state()
+
+    # Listen for signals indicating a new alarm has been added via service.
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass, f"{SIGNAL_ADD_ALARM}_{entry.entry_id}", _async_handle_new_alarm_signal
+        )
+    )
+    # Listen for signals indicating an alarm should be deleted.
+    entry.async_on_unload(
+        async_dispatcher_connect(
+            hass,
+            f"{SIGNAL_DELETE_ALARM}_{entry.entry_id}",
+            _async_handle_delete_alarm_signal,
+        )
+    )
+    # Register AlarmManager's cleanup function for all scheduled triggers on unload
+    entry.async_on_unload(alarm_manager.async_cancel_all_scheduled_triggers)
 
 
 class AlarmManager:
@@ -349,6 +469,8 @@ class AlarmManager:
             if entity_to_remove:
                 LOGGER.debug("Removing alarm entity: %s", entity_to_remove.entity_id)
                 await entity_to_remove.async_remove()
+                er = entity_registry.async_get(self.hass)
+                er.async_remove(entity_to_remove.entity_id)
             else:
                 LOGGER.warning(
                     "Alarm entity for number %s not found in runtime data for removal.",
