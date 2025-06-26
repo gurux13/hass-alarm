@@ -10,10 +10,13 @@ from homeassistant.helpers import (
     intent,
 )
 
-from wake_up_alarm.const import ATTR_ALARM_NUMBER, HASS_DATA_ALARM_MANAGER
+from custom_components.wake_up_alarm.const import (
+    ATTR_ALARM_NUMBER,
+    HASS_DATA_ALARM_MANAGER,
+)
 
 if TYPE_CHECKING:
-    from wake_up_alarm.alarm_manager import AlarmManager
+    from custom_components.wake_up_alarm.alarm_manager import AlarmManager
 
 
 class DeleteAlarmIntent(intent.IntentHandler):

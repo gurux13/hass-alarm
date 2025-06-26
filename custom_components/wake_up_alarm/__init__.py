@@ -2,7 +2,7 @@
 Custom integration to integrate wake_up_alarm with Home Assistant.
 
 For more details about this integration, please refer to
-https://github.com/ludeeus/wake_up_alarm
+https://github.com/gurux13/wake_up_alarm
 """
 
 from __future__ import annotations
@@ -10,12 +10,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import voluptuous as vol
-from homeassistant.const import ATTR_DEVICE_ID, ATTR_ENTITY_ID, Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.const import ATTR_ENTITY_ID, Platform
 from homeassistant.helpers import (
     config_validation as cv,
 )
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import (
     entity_registry as er,
 )
@@ -40,12 +38,13 @@ from .const import (
     SIGNAL_DELETE_ALARM,
 )
 from .data import WakeUpAlarmData
-from .intents.delete_all_alarms_intent import DeleteAllAlarmsIntent
 from .intents.delete_alarm_intent import DeleteAlarmIntent
+from .intents.delete_all_alarms_intent import DeleteAllAlarmsIntent
 from .intents.get_alarms_intent import GetAlarmsIntent
 from .intents.set_alarm_intent import SetAlarmIntent
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant, ServiceCall
     from homeassistant.helpers.typing import ConfigType
 
     from .data import WakeUpAlarmConfigEntry

@@ -11,7 +11,11 @@ from homeassistant.helpers import (
     intent,
 )
 
-from wake_up_alarm.const import ATTR_ALARM_DATETIME, DOMAIN, SERVICE_ADD_ALARM
+from custom_components.wake_up_alarm.const import (
+    ATTR_ALARM_DATETIME,
+    DOMAIN,
+    SERVICE_ADD_ALARM,
+)
 
 
 class SetAlarmIntent(intent.IntentHandler):
