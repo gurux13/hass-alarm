@@ -1,4 +1,4 @@
-"""Sensor platform for integration_blueprint."""
+"""Sensor platform for wake_up_alarm."""
 
 from __future__ import annotations
 
@@ -20,14 +20,14 @@ from .const import (
     SIGNAL_ADD_ALARM,
     SIGNAL_DELETE_ALARM,
 )
-from .entity import IntegrationBlueprintEntity
+from .entity import WakeUpAlarmEntity
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .data import IntegrationBlueprintConfigEntry
+    from .data import WakeUpAlarmConfigEntry
     from .alarm_manager import AlarmManager
 
 
@@ -41,7 +41,7 @@ ALL_ALARMS_SUMMARY_SENSOR_DESCRIPTION = SensorEntityDescription(
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
+    entry: WakeUpAlarmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     from .alarm_manager import async_setup_entry as am_async_setup_entry
@@ -49,7 +49,7 @@ async def async_setup_entry(
     await am_async_setup_entry(hass, entry, async_add_entities)
 
 
-class AllAlarmsSensor(IntegrationBlueprintEntity, SensorEntity):
+class AllAlarmsSensor(WakeUpAlarmEntity, SensorEntity):
     """Sensor representing the count and list of all alarms for this config entry."""
 
     _attr_should_poll = False  # State is updated via callbacks
@@ -57,7 +57,7 @@ class AllAlarmsSensor(IntegrationBlueprintEntity, SensorEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: IntegrationBlueprintConfigEntry,
+        entry: WakeUpAlarmConfigEntry,
         alarm_manager: AlarmManager,
     ) -> None:
         """Initialize the sensor class."""
@@ -71,8 +71,8 @@ class AllAlarmsSensor(IntegrationBlueprintEntity, SensorEntity):
         # Associate this summary sensor with the same device as individual alarms
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Integration Blueprint Alarms ({entry.title})",
-            manufacturer="Blueprint Industries",
+            name=f"WakeUp Alarm Summary ({entry.title})",
+            manufacturer="Ephemeral",
             model="Managed Alarm",
             entry_type=DeviceEntryType.SERVICE,
         )

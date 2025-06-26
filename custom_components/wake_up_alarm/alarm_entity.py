@@ -10,14 +10,14 @@ from homeassistant.helpers.device_registry import DeviceInfo, DeviceEntryType
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, LOGGER
-from custom_components.integration_blueprint.entity import IntegrationBlueprintEntity
+from custom_components.wake_up_alarm.entity import WakeUpAlarmEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from .data import IntegrationBlueprintConfigEntry
+    from .data import WakeUpAlarmConfigEntry
 
 
-class AlarmEntity(IntegrationBlueprintEntity, SensorEntity):
+class AlarmEntity(WakeUpAlarmEntity, SensorEntity):
     """AlarmEntity class representing a single alarm as a sensor."""
 
     _attr_icon = "mdi:alarm"  # Example icon
@@ -28,7 +28,7 @@ class AlarmEntity(IntegrationBlueprintEntity, SensorEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: IntegrationBlueprintConfigEntry,
+        entry: WakeUpAlarmConfigEntry,
         alarm_number: int,
         alarm_datetime_utc: datetime,
     ) -> None:
@@ -59,8 +59,8 @@ class AlarmEntity(IntegrationBlueprintEntity, SensorEntity):
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._entry_id)},
-            name=f"Integration Blueprint Alarms ({entry.title})",
-            manufacturer="Blueprint Industries",
+            name=f"WakeUp Alarm ({entry.title})",
+            manufacturer="Ephemeral",
             model="Managed Alarm",
             entry_type=DeviceEntryType.SERVICE,
         )

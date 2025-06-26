@@ -1,4 +1,4 @@
-"""Switch platform for integration_blueprint."""
+"""Switch platform for wake_up_alarm."""
 
 from __future__ import annotations
 
@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .entity import IntegrationBlueprintEntity
+from .entity import WakeUpAlarmEntity
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .data import IntegrationBlueprintConfigEntry
+    from .data import WakeUpAlarmConfigEntry
 
 ENTITY_DESCRIPTIONS = (
     SwitchEntityDescription(
@@ -26,22 +26,22 @@ ENTITY_DESCRIPTIONS = (
 
 async def async_setup_entry(
     hass: HomeAssistant,  # noqa: ARG001 Unused function argument: `hass`
-    entry: IntegrationBlueprintConfigEntry,
+    entry: WakeUpAlarmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the switch platform."""
     async_add_entities(
-        IntegrationBlueprintSwitch(
+        WakeUpAlarmSwitch(
             entity_description=entity_description,
         )
         for entity_description in ENTITY_DESCRIPTIONS
     )
 
 
-class IntegrationBlueprintSwitch(
-    IntegrationBlueprintEntity, SwitchEntity, RestoreEntity
+class WakeUpAlarmSwitch(
+    WakeUpAlarmEntity, SwitchEntity, RestoreEntity
 ):
-    """integration_blueprint switch class."""
+    """wake_up_alarm switch class."""
 
     def __init__(
         self,

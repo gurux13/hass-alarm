@@ -1,4 +1,4 @@
-"""Adds config flow for Blueprint."""
+"""Adds config flow for the integration."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from homeassistant.helpers import selector
 from .const import DOMAIN, LOGGER
 
 
-class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Blueprint."""
+class IntegrationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
+    """Config flow for the integration."""
 
     VERSION = 1
 

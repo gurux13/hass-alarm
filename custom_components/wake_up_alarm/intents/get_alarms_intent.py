@@ -7,10 +7,10 @@ from homeassistant.helpers import (
 )
 from homeassistant.util import dt as dt_util
 
-from integration_blueprint.const import HASS_DATA_ALARM_MANAGER
+from wake_up_alarm.const import HASS_DATA_ALARM_MANAGER
 
 if TYPE_CHECKING:
-    from integration_blueprint.alarm_manager import AlarmManager
+    from wake_up_alarm.alarm_manager import AlarmManager
 
 
 class GetAlarmsIntent(intent.IntentHandler):

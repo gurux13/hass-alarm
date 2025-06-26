@@ -1,4 +1,4 @@
-# Describes the services provided by the Integration Blueprint integration
+# Describes the services provided by the WakeUp Alarm integration
 
 add_alarm:
   name: Add Alarm

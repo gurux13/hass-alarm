@@ -1,8 +1,8 @@
 """
-Custom integration to integrate integration_blueprint with Home Assistant.
+Custom integration to integrate wake_up_alarm with Home Assistant.
 
 For more details about this integration, please refer to
-https://github.com/ludeeus/integration_blueprint
+https://github.com/ludeeus/wake_up_alarm
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.loader import async_get_loaded_integration
 from homeassistant.util import dt as dt_util
 
-from custom_components.integration_blueprint.alarm_manager import AlarmManager
+from custom_components.wake_up_alarm.alarm_manager import AlarmManager
 
 from .const import (
     ATTR_ALARM_DATETIME,
@@ -39,7 +39,7 @@ from .const import (
     SIGNAL_ADD_ALARM,
     SIGNAL_DELETE_ALARM,
 )
-from .data import IntegrationBlueprintData
+from .data import WakeUpAlarmData
 from .intents.delete_all_alarms_intent import DeleteAllAlarmsIntent
 from .intents.delete_alarm_intent import DeleteAlarmIntent
 from .intents.get_alarms_intent import GetAlarmsIntent
@@ -48,7 +48,7 @@ from .intents.set_alarm_intent import SetAlarmIntent
 if TYPE_CHECKING:
     from homeassistant.helpers.typing import ConfigType
 
-    from .data import IntegrationBlueprintConfigEntry
+    from .data import WakeUpAlarmConfigEntry
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -70,7 +70,7 @@ DELETE_ALARM_BY_NUMBER_SERVICE_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration_blueprint domain."""
+    """Set up the wake_up_alarm domain."""
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
 
@@ -192,11 +192,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 # https://developers.home-assistant.io/docs/config_entries_index/#setting-up-an-entry
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
+    entry: WakeUpAlarmConfigEntry,
 ) -> bool:
     """Set up this integration using UI."""
 
-    entry.runtime_data = IntegrationBlueprintData(
+    entry.runtime_data = WakeUpAlarmData(
         integration=async_get_loaded_integration(hass, entry.domain),
         alarm_entities={},  # Initialize alarm_entities dict
     )
@@ -262,7 +262,7 @@ async def async_setup_entry(
 
 async def async_unload_entry(
     hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
+    entry: WakeUpAlarmConfigEntry,
 ) -> bool:
     """Handle removal of an entry."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -270,7 +270,7 @@ async def async_unload_entry(
 
 async def async_reload_entry(
     hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
+    entry: WakeUpAlarmConfigEntry,
 ) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)

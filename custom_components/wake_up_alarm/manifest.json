@@ -1,0 +1,12 @@
+{
+  "domain": "wake_up_alarm",
+  "name": "Wake Up Alarm",
+  "codeowners": [
+    "@gurux13"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/gurux13/hass-alarm",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/gurux13/hass-alarm/issues",
+  "version": "0.1.0"
+}

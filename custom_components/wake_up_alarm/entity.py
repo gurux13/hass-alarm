@@ -1,4 +1,4 @@
-"""BlueprintEntity class."""
+"""AlarmEntity class."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from homeassistant.helpers.entity import Entity
 from .const import ATTRIBUTION
 
 
-class IntegrationBlueprintEntity(Entity):
-    """BlueprintEntity class."""
+class WakeUpAlarmEntity(Entity):
+    """AlarmEntity class."""
 
     _attr_attribution = ATTRIBUTION
 

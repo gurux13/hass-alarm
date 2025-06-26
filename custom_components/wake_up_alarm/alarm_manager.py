@@ -1,4 +1,4 @@
-"""Alarm Manager for integration_blueprint."""
+"""Alarm Manager for wake_up_alarm."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from .const import (
     STORAGE_KEY_ALARMS_FORMAT,
     STORAGE_VERSION,
 )
-from .data import IntegrationBlueprintConfigEntry  # Added
+from .data import WakeUpAlarmConfigEntry  # Added
 from .sensor import AllAlarmsSensor
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .data import IntegrationBlueprintConfigEntry
+    from .data import WakeUpAlarmConfigEntry
 
 
 async def async_remove_entry(hass, entry) -> None:
@@ -50,7 +50,7 @@ async def async_remove_entry(hass, entry) -> None:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: IntegrationBlueprintConfigEntry,
+    entry: WakeUpAlarmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform."""
@@ -185,7 +185,7 @@ class AlarmManager:
         hass.data[HASS_DATA_ALARM_MANAGER] = self
 
     def __init__(
-        self, hass: HomeAssistant, entry: IntegrationBlueprintConfigEntry
+        self, hass: HomeAssistant, entry: WakeUpAlarmConfigEntry
     ) -> None:
         """Initialize the Alarm Manager."""
         if HASS_DATA_ALARM_MANAGER in hass.data:

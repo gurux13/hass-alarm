@@ -1,10 +1,10 @@
-"""Constants for integration_blueprint."""
+"""Constants for wake_up_alarm."""
 
 from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)
 
-DOMAIN = "integration_blueprint"
+DOMAIN = "wake_up_alarm"
 ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
 HOME_LLM_API_ID = "hass_alarm_llm"
 SERVICE_TOOL_NAME = "HassAlarmTool"

@@ -1,4 +1,4 @@
-"""Custom types for integration_blueprint."""
+"""Custom types for wake_up_alarm."""
 
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -11,12 +11,12 @@ if TYPE_CHECKING:
     from homeassistant.loader import Integration
 
 
-type IntegrationBlueprintConfigEntry = ConfigEntry[IntegrationBlueprintData]
+type WakeUpAlarmConfigEntry = ConfigEntry[WakeUpAlarmData]
 
 
 @dataclass
-class IntegrationBlueprintData:
-    """Data for the Blueprint integration."""
+class WakeUpAlarmData:
+    """Data for the WakeUp Alarm integration."""
 
     integration: Integration
     alarm_entities: dict[int, AlarmEntity] = field(default_factory=dict)
