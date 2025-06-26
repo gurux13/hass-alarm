@@ -289,6 +289,13 @@ class AlarmManager:
             return 1
         return max(alarm["number"] for alarm in self._alarms) + 1
 
+    def get_alarm(self, alarm_number: int) -> dict[str, Any] | None:
+        """Get an alarm by its number."""
+        for alarm in self._alarms:
+            if alarm["number"] == alarm_number:
+                return alarm
+        return None
+
     @callback
     def _create_alarm_data_and_persist(
         self, alarm_datetime: datetime
@@ -443,6 +450,20 @@ class AlarmManager:
                 alarm_number,
                 self._entry_id,
             )
+
+    @callback
+    async def delete_all_alarms(self) -> int:
+        """Delete all alarms, update internal list, and schedule save."""
+        deleted_count = 0
+        # Iterate over a copy of the list because delete_alarm modifies self._alarms
+        # and removes items from self._entry.runtime_data.alarm_entities
+        for alarm_data in list(self._alarms):
+            if await self.delete_alarm(alarm_data["number"]):
+                deleted_count += 1
+
+        LOGGER.debug("Deleted %s alarms.", deleted_count)
+        # The individual delete_alarm calls handle saving and entity removal.
+        return deleted_count
 
     @callback
     async def delete_alarm(self, alarm_number: int) -> bool:

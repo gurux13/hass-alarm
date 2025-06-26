@@ -27,7 +27,6 @@ from homeassistant.loader import async_get_loaded_integration
 from homeassistant.util import dt as dt_util
 
 from custom_components.integration_blueprint.alarm_manager import AlarmManager
-from custom_components.integration_blueprint.get_alarms_intent import GetAlarmsIntent
 
 from .const import (
     ATTR_ALARM_DATETIME,
@@ -41,8 +40,10 @@ from .const import (
     SIGNAL_DELETE_ALARM,
 )
 from .data import IntegrationBlueprintData
-from .get_alarms_intent import GetAlarmsIntent
-from .set_alarm_intent import SetAlarmIntent
+from .intents.delete_all_alarms_intent import DeleteAllAlarmsIntent
+from .intents.delete_alarm_intent import DeleteAlarmIntent
+from .intents.get_alarms_intent import GetAlarmsIntent
+from .intents.set_alarm_intent import SetAlarmIntent
 
 if TYPE_CHECKING:
     from homeassistant.helpers.typing import ConfigType
@@ -202,6 +203,8 @@ async def async_setup_entry(
 
     intent.async_register(hass, SetAlarmIntent())
     intent.async_register(hass, GetAlarmsIntent())
+    intent.async_register(hass, DeleteAllAlarmsIntent())
+    intent.async_register(hass, DeleteAlarmIntent())
 
     # Define the service handler for adding an alarm
     async def async_handle_add_alarm_service(service_call: ServiceCall) -> None:

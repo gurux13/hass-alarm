@@ -7,17 +7,17 @@ from homeassistant.helpers import (
 )
 from homeassistant.util import dt as dt_util
 
-from .const import HASS_DATA_ALARM_MANAGER
+from ..const import HASS_DATA_ALARM_MANAGER
 
 if TYPE_CHECKING:
-    from .alarm_manager import AlarmManager
+    from ..alarm_manager import AlarmManager
 
 
 class GetAlarmsIntent(intent.IntentHandler):
     """Intent handler for getting a list of alarms."""
 
     intent_type = "HassGetAlarms"
-    description = "Gets a list of all active alarms."
+    description = "Gets a list of all alarms as a mapping between alarm numbers and their dates and times. This does not mutate state, it is safe to call."
 
     # No slots required for getting all alarms
     slot_schema: ClassVar[dict] = {}
