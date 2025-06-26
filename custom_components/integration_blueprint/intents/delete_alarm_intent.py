@@ -1,15 +1,19 @@
 """Intent handler for deleting an alarm."""
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import voluptuous as vol
 from homeassistant.helpers import (
     config_validation as cv,
+)
+from homeassistant.helpers import (
     intent,
 )
 
-from ..alarm_manager import AlarmManager
-from ..const import ATTR_ALARM_NUMBER, HASS_DATA_ALARM_MANAGER
+from integration_blueprint.const import ATTR_ALARM_NUMBER, HASS_DATA_ALARM_MANAGER
+
+if TYPE_CHECKING:
+    from integration_blueprint.alarm_manager import AlarmManager
 
 
 class DeleteAlarmIntent(intent.IntentHandler):
@@ -35,7 +39,10 @@ class DeleteAlarmIntent(intent.IntentHandler):
         alarm_manager: AlarmManager | None = hass.data.get(HASS_DATA_ALARM_MANAGER)
 
         if not alarm_manager:
-            msg = "No alarm manager found. Please ensure the integration is set up correctly."
+            msg = (
+                "No alarm manager found."
+                "Please ensure the integration is set up correctly."
+            )
             raise intent.IntentError(msg)
         alarm = alarm_manager.get_alarm(alarm_number)
 
@@ -47,7 +54,8 @@ class DeleteAlarmIntent(intent.IntentHandler):
         response = intent_obj.create_response()
         if success:
             response.async_set_speech(
-                f"Alarm for {alarm['datetime_obj'].strftime('%Y-%m-%d %H:%M:%S')} has been deleted."
+                f"Alarm for {alarm['datetime_obj'].strftime('%Y-%m-%d %H:%M:%S')} "
+                "has been deleted."
             )
         else:
             response.async_set_speech(

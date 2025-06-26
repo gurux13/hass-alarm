@@ -1,15 +1,16 @@
 """Intent handler for deleting all alarms."""
 
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import voluptuous as vol
 from homeassistant.helpers import (
-    config_validation as cv,
     intent,
 )
 
-from ..alarm_manager import AlarmManager
-from ..const import HASS_DATA_ALARM_MANAGER
+from integration_blueprint.const import HASS_DATA_ALARM_MANAGER
+
+if TYPE_CHECKING:
+    from integration_blueprint.alarm_manager import AlarmManager
 
 
 class DeleteAllAlarmsIntent(intent.IntentHandler):
@@ -18,7 +19,9 @@ class DeleteAllAlarmsIntent(intent.IntentHandler):
     intent_type = "HassDeleteAllAlarms"
     description = "Deletes all alarms."
 
-    slot_schema: ClassVar[dict[vol.Marker, Any]] = {}  # No slots needed for deleting all
+    slot_schema: ClassVar[
+        dict[vol.Marker, Any]
+    ] = {}  # No slots needed for deleting all
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         """Handle the intent."""
@@ -27,7 +30,10 @@ class DeleteAllAlarmsIntent(intent.IntentHandler):
         alarm_manager: AlarmManager | None = hass.data.get(HASS_DATA_ALARM_MANAGER)
 
         if not alarm_manager:
-            msg = "No alarm manager found. Please ensure the integration is set up correctly."
+            msg = (
+                "No alarm manager found. Please ensure the integration is"
+                "set up correctly."
+            )
             raise intent.IntentError(msg)
 
         deleted_count = await alarm_manager.delete_all_alarms()
