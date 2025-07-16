@@ -83,15 +83,6 @@ class AllAlarmsSensor(WakeUpAlarmEntity, SensorEntity):
         self._attr_unique_id = f"{self._entry_id}_{self.entity_description.key}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
-        # # Associate this summary sensor with the same device as individual alarms
-        # self._attr_device_info = DeviceInfo(
-        #     identifiers={(DOMAIN, self._entry_id)},
-        #     name=f"Next alarm",
-        #     manufacturer="Ephemeral",
-        #     model="Managed Alarm",
-        #     entry_type=DeviceEntryType.SERVICE,
-        # )
-
     @property
     def native_value(self) -> datetime | None:
         """Return the number of active alarms."""
@@ -102,7 +93,7 @@ class AllAlarmsSensor(WakeUpAlarmEntity, SensorEntity):
         """Return the state attributes, including the list of alarm times."""
         alarms_data = self._alarm_manager.get_all_alarms_data()
         if not alarms_data:
-            return {"alarm_times": []}
+            return {"alarm_times": [], "alarms_count": 0}
 
         # Sort by datetime for display purposes in attributes
         sorted_alarm_times = sorted(alarm["datetime_obj"] for alarm in alarms_data)

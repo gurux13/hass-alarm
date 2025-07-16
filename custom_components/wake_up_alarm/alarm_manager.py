@@ -206,6 +206,16 @@ class AlarmManager:
         )
         self._entry.runtime_data.scheduled_alarm_triggers = {}
 
+    def refresh_sensor(self) -> None:
+        """Refresh the next alarm sensor."""
+        component = self.hass.data.get("sensor")
+        sensor = component.get_entity("sensor.next_alarm") if component else None
+        if sensor:
+            LOGGER.debug("Refreshing next alarm sensor")
+            sensor.async_write_ha_state()
+        else:
+            LOGGER.warning("Next alarm sensor not found in entity registry.")
+
     def recalculate_free_alarm_numbers(self) -> None:
         """Recalculate the set of free alarm numbers based on current alarms."""
         if not self._alarms:
@@ -467,7 +477,7 @@ class AlarmManager:
                 deleted_count += 1
 
         LOGGER.debug("Deleted %s alarms.", deleted_count)
-        # The individual delete_alarm calls handle saving and entity removal.
+        self.refresh_sensor()
         return deleted_count
 
     @callback
@@ -502,6 +512,7 @@ class AlarmManager:
                     "Alarm entity for number %s not found in runtime data for removal.",
                     alarm_number,
                 )
+            self.refresh_sensor()
             return True
         LOGGER.warning(
             "Attempted to delete non-existent alarm number %s.", alarm_number

@@ -34,6 +34,7 @@ from .const import (
     SERVICE_ADD_ALARM,
     SERVICE_DELETE_ALARM,
     SERVICE_DELETE_ALARM_BY_NUMBER,
+    SERVICE_DELETE_ALL_ALARMS,
     SIGNAL_ADD_ALARM,
     SIGNAL_DELETE_ALARM,
 )
@@ -65,6 +66,8 @@ DELETE_ALARM_BY_NUMBER_SERVICE_SCHEMA = vol.Schema(
         # ATTR_DEVICE_ID is removed as per the requirement
     }
 )
+
+DELETE_ALL_ALARMS_SERVICE_SCHEMA = vol.Schema({})
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -204,7 +207,6 @@ async def async_setup_entry(
     intent.async_register(hass, DeleteAllAlarmsIntent())
     intent.async_register(hass, DeleteAlarmIntent())
 
-    # Define the service handler for adding an alarm
     async def async_handle_add_alarm_service(service_call: ServiceCall) -> None:
         """Handle the service call to add a new alarm."""
         # cv.datetime ensures alarm_datetime_obj is a datetime object
@@ -246,15 +248,43 @@ async def async_setup_entry(
         schema=ADD_ALARM_SERVICE_SCHEMA,
     )
 
-    # Ensure service is removed on unload
-    def _unregister_service():
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_ALARM)
+    async def async_handle_delete_all_alarms_service(service_call: ServiceCall) -> None:
+        """Handle the service call to delete all alarms across all instances."""
+        am = AlarmManager.get_instance(hass)
+        if not am:
+            LOGGER.warning("Cannot delete all alarms: No instance of %s found.", DOMAIN)
+            return
+        await am.delete_all_alarms()
 
-    entry.async_on_unload(_unregister_service)
+    LOGGER.info(
+        "Registering service %s for deleting all alarms.", SERVICE_DELETE_ALL_ALARMS
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_ALL_ALARMS,
+        async_handle_delete_all_alarms_service,
+        schema=DELETE_ALL_ALARMS_SERVICE_SCHEMA,
+    )
+
+    # Ensure service is removed on unload
+    def _unregister_services():
+        hass.services.async_remove(DOMAIN, SERVICE_ADD_ALARM)
+        hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALARM)
+        hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALARM_BY_NUMBER)
+        hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALL_ALARMS)
+
+    entry.async_on_unload(_unregister_services)
+
+    def _unregister_intents():
+        intent.async_remove(hass, SetAlarmIntent().intent_type)
+        intent.async_remove(hass, GetAlarmsIntent().intent_type)
+        intent.async_remove(hass, DeleteAllAlarmsIntent().intent_type)
+        intent.async_remove(hass, DeleteAlarmIntent().intent_type)
+
+    entry.async_on_unload(_unregister_intents)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
     return True
 
 

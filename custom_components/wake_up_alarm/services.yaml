@@ -26,3 +26,6 @@ delete_alarm_by_number:
       example: 42
       selector:
         number:
+delete_all_alarms:
+  name: Delete All Alarms
+  description: Deletes all alarms
