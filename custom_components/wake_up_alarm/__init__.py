@@ -51,7 +51,6 @@ if TYPE_CHECKING:
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
-    Platform.SWITCH,
 ]
 
 DELETE_ALARM_SERVICE_SCHEMA = vol.Schema(
@@ -264,6 +263,7 @@ async def async_unload_entry(
     entry: WakeUpAlarmConfigEntry,
 ) -> bool:
     """Handle removal of an entry."""
+    LOGGER.debug("init: Unloading entry for %s", entry.entry_id)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
@@ -274,3 +274,15 @@ async def async_reload_entry(
     """Reload config entry."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
+
+
+async def async_remove_entry(
+    hass: HomeAssistant,
+    entry: WakeUpAlarmConfigEntry,
+) -> bool:
+    """Handle removal of the entry."""
+    LOGGER.debug("Removing entry for %s", entry.entry_id)
+    from .alarm_manager import async_remove_entry as am_async_remove_entry
+
+    await am_async_remove_entry(hass, entry)
+    return True

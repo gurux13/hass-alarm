@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorDeviceClass,
-)  # Added SensorDeviceClass
+)
 from homeassistant.helpers.device_registry import DeviceInfo, DeviceEntryType
 from homeassistant.util import dt as dt_util
 

@@ -184,9 +184,7 @@ class AlarmManager:
         """Save the AlarmManager instance to the Home Assistant data."""
         hass.data[HASS_DATA_ALARM_MANAGER] = self
 
-    def __init__(
-        self, hass: HomeAssistant, entry: WakeUpAlarmConfigEntry
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry: WakeUpAlarmConfigEntry) -> None:
         """Initialize the Alarm Manager."""
         if HASS_DATA_ALARM_MANAGER in hass.data:
             msg = (
@@ -219,6 +217,13 @@ class AlarmManager:
                 for num in range(1, max(used_numbers) + 1)
                 if num not in used_numbers
             }
+
+    def get_next_alarm_time(self) -> datetime | None:
+        """Get the next alarm time, or None if no alarms are set."""
+        if not self._alarms:
+            return None
+        # Return the earliest alarm datetime
+        return min(alarm["datetime_obj"] for alarm in self._alarms)
 
     async def async_load_alarms(self) -> None:
         """Load alarms from the store."""
