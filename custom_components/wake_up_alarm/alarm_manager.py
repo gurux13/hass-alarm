@@ -29,6 +29,7 @@ from .const import (
 )
 from .data import WakeUpAlarmConfigEntry  # Added
 from .sensor import AllAlarmsSensor
+from .alarm_sensor import IsAlarmSensor
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -72,7 +73,12 @@ async def async_setup_entry(
 
     all_alarms_summary_sensor = AllAlarmsSensor(hass, entry, alarm_manager)
 
-    entities_to_add: list[SensorEntity] = [all_alarms_summary_sensor]
+    is_alarming_sensor = IsAlarmSensor(hass, entry, alarm_manager)
+
+    entities_to_add: list[SensorEntity] = [
+        all_alarms_summary_sensor,
+        is_alarming_sensor,
+    ]
 
     # Create AlarmEntity instances for loaded alarms and schedule their triggers via AlarmManager
     loaded_alarm_entities = (
@@ -213,6 +219,15 @@ class AlarmManager:
         if sensor:
             LOGGER.debug("Refreshing next alarm sensor")
             sensor.async_write_ha_state()
+        else:
+            LOGGER.warning("Next alarm sensor not found in entity registry.")
+
+    def trigger_is_alarming_sensor(self) -> None:
+        component = self.hass.data.get("sensor")
+        sensor = component.get_entity("sensor.is_alarming_now") if component else None
+        if sensor:
+            LOGGER.debug("Refreshing next alarm sensor")
+            sensor.trigger()
         else:
             LOGGER.warning("Next alarm sensor not found in entity registry.")
 
@@ -395,6 +410,7 @@ class AlarmManager:
                     "alarm_datetime": alarm_datetime_utc.isoformat(),
                 },
             )
+            self.trigger_is_alarming_sensor()
             await self.delete_alarm(alarm_number)  # Remove alarm after firing
             if alarm_number in self._entry.runtime_data.scheduled_alarm_triggers:
                 del self._entry.runtime_data.scheduled_alarm_triggers[alarm_number]

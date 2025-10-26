@@ -5,32 +5,25 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
+    SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
-    SensorDeviceClass,
 )
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import (
-    ATTR_ALARM_DATETIME,
     DOMAIN,
-    HASS_DATA_ALARM_MANAGER,
     LOGGER,
-    SIGNAL_ADD_ALARM,
-    SIGNAL_DELETE_ALARM,
 )
 from .entity import WakeUpAlarmEntity
-
 
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from .data import WakeUpAlarmConfigEntry
     from .alarm_manager import AlarmManager
+    from .data import WakeUpAlarmConfigEntry
 
 
 # SensorDescription for the sensor that aggregates all alarm information.
