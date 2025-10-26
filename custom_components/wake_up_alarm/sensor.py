@@ -39,6 +39,7 @@ async def async_setup_entry(
     entry: WakeUpAlarmConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    """Set up the sensor platform for wake_up_alarm."""
     from .alarm_manager import async_setup_entry as am_async_setup_entry
 
     await am_async_setup_entry(hass, entry, async_add_entities)
@@ -57,7 +58,7 @@ async def async_remove_entry(
 
 
 class AllAlarmsSensor(WakeUpAlarmEntity, SensorEntity):
-    """Sensor representing the next alarm and list of all alarms for this config entry."""
+    """Sensor representing the next alarm and list of all alarms."""
 
     _attr_should_poll = False  # State is updated via callbacks
 

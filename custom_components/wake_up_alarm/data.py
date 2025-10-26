@@ -1,14 +1,17 @@
 """Custom types for wake_up_alarm."""
 
 from __future__ import annotations
-from dataclasses import dataclass, field
 
-from typing import TYPE_CHECKING, Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .alarm_entity import AlarmEntity
+    from collections.abc import Callable
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.loader import Integration
+
+    from .alarm_entity import AlarmEntity
 
 
 type WakeUpAlarmConfigEntry = ConfigEntry[WakeUpAlarmData]

@@ -4,19 +4,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
-from collections.abc import Callable
 
-from homeassistant.components.sensor import (
-    SensorEntity,
-)
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers import entity_registry
 from homeassistant.util import dt as dt_util
 
-from .alarm_entity import AlarmEntity  # Added
+from .alarm_entity import AlarmEntity
+from .alarm_sensor import IsAlarmSensor
 from .const import (
     ATTR_ALARM_DATETIME,
     EVENT_ALARM_TRIGGERED,
@@ -27,19 +24,23 @@ from .const import (
     STORAGE_KEY_ALARMS_FORMAT,
     STORAGE_VERSION,
 )
-from .data import WakeUpAlarmConfigEntry  # Added
+from .data import WakeUpAlarmConfigEntry
 from .sensor import AllAlarmsSensor
-from .alarm_sensor import IsAlarmSensor
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import datetime
 
+    from homeassistant.components.sensor import SensorEntity
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .data import WakeUpAlarmConfigEntry
 
 
-async def async_remove_entry(hass, entry) -> None:
+async def async_remove_entry(
+    hass: HomeAssistant, entry: WakeUpAlarmConfigEntry
+) -> None:
+    """Handle removal of the entry."""
     if HASS_DATA_ALARM_MANAGER in hass.data:
         del hass.data[HASS_DATA_ALARM_MANAGER]
         LOGGER.debug(
@@ -67,8 +68,6 @@ async def async_setup_entry(
 
     await alarm_manager.async_load_alarms()
 
-    # Note: entry.runtime_data.scheduled_alarm_triggers is now initialized within AlarmManager's __init__
-    # Ensure alarm_entities dict exists in runtime_data for storing entity instances
     entry.runtime_data.alarm_entities = {}
 
     all_alarms_summary_sensor = AllAlarmsSensor(hass, entry, alarm_manager)
@@ -80,7 +79,6 @@ async def async_setup_entry(
         is_alarming_sensor,
     ]
 
-    # Create AlarmEntity instances for loaded alarms and schedule their triggers via AlarmManager
     loaded_alarm_entities = (
         alarm_manager.create_entities_for_loaded_alarms_and_schedule()
     )
@@ -92,15 +90,14 @@ async def async_setup_entry(
 
     @callback
     def _async_handle_new_alarm_signal(alarm_details: dict[str, Any]) -> None:
-        """Handle the signal to add a new alarm from a service call.
+        """
+        Handle the signal to add a new alarm from a service call.
 
         This creates an individual AlarmEntity sensor, adds the alarm to the
         AlarmManager (which handles persistence), and updates the summary sensor.
         """
-        # This datetime is now guaranteed to be UTC from the __init__.py signal dispatch
         alarm_datetime_utc: datetime = alarm_details[ATTR_ALARM_DATETIME]
 
-        # AlarmManager now handles data creation, persistence, entity object instantiation, and scheduling.
         new_alarm_entity = alarm_manager.create_alarm(alarm_datetime_utc)
 
         if new_alarm_entity is None:
@@ -112,8 +109,8 @@ async def async_setup_entry(
 
         LOGGER.debug(
             ("Sensor platform received new alarm entity: Number=%s, DateTime='%s'"),
-            new_alarm_entity.alarm_number,  # Accessing property from AlarmEntity
-            new_alarm_entity.native_value.isoformat(),  # Accessing property from AlarmEntity
+            new_alarm_entity.alarm_number,
+            new_alarm_entity.native_value.isoformat(),
         )
 
         # Add the entity to Home Assistant
@@ -128,6 +125,9 @@ async def async_setup_entry(
     @callback
     async def _async_handle_delete_alarm_signal(alarm_details: dict[str, Any]) -> None:
         """Handle the signal to delete an alarm from a service call."""
+        del alarm_details  # Unused
+        await alarm_manager.delete_all_alarms()
+
         all_alarms_summary_sensor.async_write_ha_state()
 
     # Listen for signals indicating a new alarm has been added via service.
@@ -223,6 +223,7 @@ class AlarmManager:
             LOGGER.warning("Next alarm sensor not found in entity registry.")
 
     def trigger_is_alarming_sensor(self) -> None:
+        """Trigger update of the is_alarming_now sensor."""
         component = self.hass.data.get("sensor")
         sensor = component.get_entity("sensor.is_alarming_now") if component else None
         if sensor:
@@ -270,9 +271,6 @@ class AlarmManager:
                     )
                     continue
 
-                # Ensure the loaded datetime is UTC
-                # dt_util.parse_datetime will return a tz-aware datetime if the string has tz info
-                # or naive if it doesn't. We assume naive datetimes from storage were UTC.
                 parsed_datetime_raw = dt_util.parse_datetime(alarm_raw["datetime"])
                 if parsed_datetime_raw is None:
                     LOGGER.warning(
@@ -282,7 +280,7 @@ class AlarmManager:
 
                 if parsed_datetime_raw.tzinfo is None:
                     LOGGER.warning(
-                        "Loaded alarm datetime '%s' for number %s is tz-unknown, assuming it was stored as UTC.",
+                        "Alarm datetime '%s' for number %s is no tz, assuming UTC.",
                         alarm_raw["datetime"],
                         alarm_raw["number"],
                     )
@@ -331,9 +329,10 @@ class AlarmManager:
         self, alarm_datetime: datetime
     ) -> dict[str, Any] | None:
         """
-        Create data for a new alarm, assign a number, add it to internal list, and schedule save.
+        Create data for a new alarm, add it to internal list, and schedule a save.
 
-        Returns the details (number, datetime_obj) of the created alarm data, or None if creation failed.
+        Returns the details (number, datetime_obj) of the created alarm data, or None
+        if creation failed.
         """
         alarm_number = self.get_next_alarm_number()
 
@@ -351,9 +350,7 @@ class AlarmManager:
 
     @callback
     def create_alarm(self, alarm_datetime_utc: datetime) -> AlarmEntity | None:
-        """
-        Create alarm e2e
-        """
+        """Create alarm e2e."""
         created_alarm_data = self._create_alarm_data_and_persist(alarm_datetime_utc)
 
         if created_alarm_data:
@@ -370,7 +367,8 @@ class AlarmManager:
 
     def create_entities_for_loaded_alarms_and_schedule(self) -> list[AlarmEntity]:
         """
-        Creates AlarmEntity instances for all loaded alarms and schedules their triggers.
+        Create AlarmEntity instances for all loaded alarms and schedules triggers.
+
         Returns a list of created AlarmEntity instances.
         """
         created_entities: list[AlarmEntity] = []
@@ -395,7 +393,7 @@ class AlarmManager:
 
         @callback
         async def _fire_alarm_event_callback(_now: datetime) -> None:
-            """Callback executed when alarm time is reached."""
+            """Execute callback when alarm time is reached."""
             LOGGER.info(
                 "Alarm %s for entry %s triggered (scheduled for %s)",
                 alarm_number,
@@ -440,7 +438,7 @@ class AlarmManager:
 
     @callback
     def add_alarm_data(self, alarm_number: int, alarm_datetime: datetime) -> bool:
-        """Add an alarm, update internal list, and schedule save. Returns True if successful."""
+        """Add an alarm and update internal list. Returns True if successful."""
         alarm_datetime_utc = alarm_datetime.astimezone(UTC)
 
         if any(alarm["number"] == alarm_number for alarm in self._alarms):
@@ -456,7 +454,7 @@ class AlarmManager:
         if alarm_number in self._free_alarm_numbers:
             self._free_alarm_numbers.remove(alarm_number)
         LOGGER.debug(
-            "Alarm %s (datetime: %s) added to manager. Total alarms: %s. Scheduling save.",
+            "Alarm %s (datetime: %s) added. Total alarms: %s. Scheduling save.",
             alarm_number,
             alarm_datetime_utc.isoformat(),
             len(self._alarms),
@@ -542,7 +540,6 @@ class AlarmManager:
         LOGGER.debug(
             "Cancelling all scheduled alarm triggers for entry %s", self._entry_id
         )
-        # Iterate over a copy of keys as _async_cancel_scheduled_alarm_trigger modifies the dict
         for alarm_num in list(self._entry.runtime_data.scheduled_alarm_triggers.keys()):
             self._async_cancel_scheduled_alarm_trigger(alarm_num)
 

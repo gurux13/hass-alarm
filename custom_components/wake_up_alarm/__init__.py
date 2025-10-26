@@ -69,9 +69,16 @@ DELETE_ALARM_BY_NUMBER_SERVICE_SCHEMA = vol.Schema(
 
 DELETE_ALL_ALARMS_SERVICE_SCHEMA = vol.Schema({})
 
+ADD_ALARM_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ALARM_DATETIME): cv.datetime,
+    }
+)
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the wake_up_alarm domain."""
+    del config  # Unused
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
 
@@ -99,7 +106,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
             if not entity_entry.config_entry_id:
                 LOGGER.warning(
-                    "Cannot delete alarm: Entity %s is not associated with a config entry.",
+                    "Cannot delete alarm: Entity %s is not associated with a config.",
                     entity_id_str,
                 )
                 continue
@@ -115,8 +122,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     delete_signal = f"{SIGNAL_DELETE_ALARM}_{config_entry_id}"
                     await AlarmManager.execute_on_instance_async(
                         hass,
-                        lambda am: (
-                            await am.delete_alarm(alarm_number) for _ in "_"
+                        lambda am, an=alarm_number: (
+                            await am.delete_alarm(an) for _ in "_"
                         ).__anext__(),
                     )
                     async_dispatcher_send(hass, delete_signal, alarm_details)
@@ -143,14 +150,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async def async_handle_delete_alarm_by_number_service(
         service_call: ServiceCall,
     ) -> None:
-        """Handle the service call to delete an alarm by its number across all instances."""
+        """Handle the service call to delete an alarm by its number."""
         alarm_number_to_delete = service_call.data[ATTR_ALARM_NUMBER]
 
         config_entries_for_domain = hass.config_entries.async_entries(DOMAIN)
 
         if not config_entries_for_domain:
             LOGGER.warning(
-                "Cannot delete alarm by number %s: No config entries found for the %s domain.",
+                "Cannot delete alarm by number %s: No config entries found for %s.",
                 alarm_number_to_delete,
                 DOMAIN,
             )
@@ -178,7 +185,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 dispatched_count,
                 DOMAIN,
             )
-        # If no instances had the alarm, the sensor platform's handler will silently ignore it or log appropriately.
+        # If no instances had the alarm, the sensor platform's handler will silently
+        # ignore it or log appropriately.
 
     hass.services.async_register(
         DOMAIN,
@@ -196,7 +204,6 @@ async def async_setup_entry(
     entry: WakeUpAlarmConfigEntry,
 ) -> bool:
     """Set up this integration using UI."""
-
     entry.runtime_data = WakeUpAlarmData(
         integration=async_get_loaded_integration(hass, entry.domain),
         alarm_entities={},  # Initialize alarm_entities dict
@@ -226,19 +233,10 @@ async def async_setup_entry(
 
         # Dispatch a signal specific to this config entry
         # The sensor platform for this entry will listen for this signal
-        entry_specific_signal = f"{SIGNAL_ADD_ALARM}_{entry.entry_id}"  # alarm_details now only contains datetime
-        async_dispatcher_send(
-            hass, entry_specific_signal, alarm_details
-        )  # alarm_details now only contains datetime
+        entry_specific_signal = f"{SIGNAL_ADD_ALARM}_{entry.entry_id}"
+        async_dispatcher_send(hass, entry_specific_signal, alarm_details)
 
     # Define the service schema
-    ADD_ALARM_SERVICE_SCHEMA = vol.Schema(
-        {
-            vol.Required(
-                ATTR_ALARM_DATETIME
-            ): cv.datetime,  # Validates and converts to datetime
-        }
-    )
 
     # Register the service
     hass.services.async_register(
@@ -250,6 +248,7 @@ async def async_setup_entry(
 
     async def async_handle_delete_all_alarms_service(service_call: ServiceCall) -> None:
         """Handle the service call to delete all alarms across all instances."""
+        del service_call  # Unused
         am = AlarmManager.get_instance(hass)
         if not am:
             LOGGER.warning("Cannot delete all alarms: No instance of %s found.", DOMAIN)
@@ -267,7 +266,7 @@ async def async_setup_entry(
     )
 
     # Ensure service is removed on unload
-    def _unregister_services():
+    def _unregister_services() -> None:
         hass.services.async_remove(DOMAIN, SERVICE_ADD_ALARM)
         hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALARM)
         hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALARM_BY_NUMBER)
@@ -275,7 +274,7 @@ async def async_setup_entry(
 
     entry.async_on_unload(_unregister_services)
 
-    def _unregister_intents():
+    def _unregister_intents() -> None:
         intent.async_remove(hass, SetAlarmIntent().intent_type)
         intent.async_remove(hass, GetAlarmsIntent().intent_type)
         intent.async_remove(hass, DeleteAllAlarmsIntent().intent_type)

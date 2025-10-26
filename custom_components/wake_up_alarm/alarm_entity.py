@@ -1,19 +1,24 @@
+"""Alarm entity for wake_up_alarm integration."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
 from homeassistant.components.sensor import (
-    SensorEntity,
     SensorDeviceClass,
+    SensorEntity,
 )
-from homeassistant.helpers.device_registry import DeviceInfo, DeviceEntryType
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, LOGGER
 from custom_components.wake_up_alarm.entity import WakeUpAlarmEntity
+
+from .const import DOMAIN, LOGGER
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
+
     from .data import WakeUpAlarmConfigEntry
 
 
@@ -40,10 +45,10 @@ class AlarmEntity(WakeUpAlarmEntity, SensorEntity):
         # The calling code (in sensor.py) should already ensure this.
         if alarm_datetime_utc.tzinfo is None or alarm_datetime_utc.tzinfo.utcoffset(
             alarm_datetime_utc
-        ) != timezone.utc.utcoffset(None):
+        ) != UTC.utcoffset(None):
             LOGGER.warning(
-                "AlarmEntity for number %s received datetime '%s' that was not explicitly UTC. Converting. "
-                "The calling code should provide UTC datetime objects.",
+                "AlarmEntity for number %s received datetime '%s' that was not  UTC."
+                "The calling code should provide UTC datetime objects, converting.",
                 alarm_number,
                 str(alarm_datetime_utc),
             )

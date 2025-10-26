@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -17,35 +17,10 @@ from .const import (
 from .entity import WakeUpAlarmEntity
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from homeassistant.core import HomeAssistant
-    from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
     from .alarm_manager import AlarmManager
     from .data import WakeUpAlarmConfigEntry
-
-
-# async def async_setup_entry(
-#     hass: HomeAssistant,
-#     entry: WakeUpAlarmConfigEntry,
-#     async_add_entities: AddEntitiesCallback,
-# ) -> None:
-#     from .alarm_manager import async_setup_entry as am_async_setup_entry
-
-#     await am_async_setup_entry(hass, entry, async_add_entities)
-
-
-# async def async_remove_entry(
-#     hass: HomeAssistant,
-#     entry: WakeUpAlarmConfigEntry,
-# ) -> bool:
-#     """Handle removal of the entry."""
-#     LOGGER.debug("Removing entry for %s", entry.entry_id)
-#     from .alarm_manager import async_remove_entry as am_async_remove_entry
-
-#     await am_async_remove_entry(hass, entry)
-#     return True
 
 # SensorDescription for the sensor that aggregates all alarm information.
 IS_ALARM_SENSOR_DESCRIPTION = SensorEntityDescription(
@@ -55,6 +30,7 @@ IS_ALARM_SENSOR_DESCRIPTION = SensorEntityDescription(
 )
 
 
+# Sensor that indicates whether an alarm is currently triggering.
 class IsAlarmSensor(WakeUpAlarmEntity, SensorEntity):
     """Sensor representing whether it's alarming now."""
 

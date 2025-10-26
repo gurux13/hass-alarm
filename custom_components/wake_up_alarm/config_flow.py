@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.helpers import selector
 
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN
 
 
 class IntegrationFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
