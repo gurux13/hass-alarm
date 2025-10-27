@@ -26,6 +26,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.wake_up_alarm.alarm_manager import AlarmManager
 
+from .alarm_manager import async_remove_entry as am_async_remove_entry
 from .const import (
     ATTR_ALARM_DATETIME,
     ATTR_ALARM_NUMBER,
@@ -311,7 +312,6 @@ async def async_remove_entry(
 ) -> bool:
     """Handle removal of the entry."""
     LOGGER.debug("Removing entry for %s", entry.entry_id)
-    from .alarm_manager import async_remove_entry as am_async_remove_entry
 
     await am_async_remove_entry(hass, entry)
     return True

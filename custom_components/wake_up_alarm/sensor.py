@@ -10,6 +10,12 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
 )
 
+from .alarm_manager import (
+    async_remove_entry as am_async_remove_entry,
+)
+from .alarm_manager import (
+    async_setup_entry as am_async_setup_entry,
+)
 from .const import (
     DOMAIN,
     LOGGER,
@@ -40,8 +46,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform for wake_up_alarm."""
-    from .alarm_manager import async_setup_entry as am_async_setup_entry
-
     await am_async_setup_entry(hass, entry, async_add_entities)
 
 
@@ -51,7 +55,6 @@ async def async_remove_entry(
 ) -> bool:
     """Handle removal of the entry."""
     LOGGER.debug("Removing entry for %s", entry.entry_id)
-    from .alarm_manager import async_remove_entry as am_async_remove_entry
 
     await am_async_remove_entry(hass, entry)
     return True
