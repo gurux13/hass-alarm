@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .alarm_entity import AlarmEntity
 from .alarm_sensor import IsAlarmSensor
+from .all_alarms_sensor import AllAlarmsSensor
 from .const import (
     ATTR_ALARM_DATETIME,
     EVENT_ALARM_TRIGGERED,
@@ -25,7 +26,6 @@ from .const import (
     STORAGE_VERSION,
 )
 from .data import WakeUpAlarmConfigEntry
-from .sensor import AllAlarmsSensor
 
 if TYPE_CHECKING:
     from collections.abc import Callable

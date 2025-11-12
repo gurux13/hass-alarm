@@ -2,16 +2,10 @@
     "config": {
         "step": {
             "user": {
-                "description": "If you need help with the configuration have a look here: https://github.com/ludeeus/wake_up_alarm",
-                "data": {
-                    "username": "Username",
-                    "password": "Password"
-                }
+                "description": "If you need help with the configuration have a look here: https://github.com/gurux13/hass-alarm"
             }
         },
         "error": {
-            "auth": "Username/Password is wrong.",
-            "connection": "Unable to connect to the server.",
             "unknown": "Unknown error occurred."
         },
         "abort": {
