@@ -12,16 +12,18 @@ from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from .alarm_entity import AlarmEntity
 from .alarm_model import (
     ALARM_TYPE_ONE_TIME,
     ALARM_TYPE_RECURRING,
     calculate_next_recurring_run,
     create_one_time_alarm,
-    create_recurring_alarm as create_recurring_alarm_data,
     normalize_alarm,
     serialize_alarm,
 )
-from .alarm_entity import AlarmEntity
+from .alarm_model import (
+    create_recurring_alarm as create_recurring_alarm_data,
+)
 from .alarm_sensor import IsAlarmSensor
 from .all_alarms_sensor import AllAlarmsSensor
 from .const import (

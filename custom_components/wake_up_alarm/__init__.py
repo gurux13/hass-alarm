@@ -9,55 +9,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import voluptuous as vol
-from homeassistant.const import ATTR_ENTITY_ID, Platform
-from homeassistant.helpers import (
-    config_validation as cv,
-)
-from homeassistant.helpers import (
-    entity_registry as er,
-)
-from homeassistant.helpers import (
-    intent,
-)
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+import intents
+import service_call_handlers
+from homeassistant.const import Platform
 from homeassistant.loader import async_get_loaded_integration
-from homeassistant.util import dt as dt_util
 
-from custom_components.wake_up_alarm.alarm_manager import AlarmManager
-
-from .alarm_model import ALARM_TYPE_ONE_TIME, ALARM_TYPE_RECURRING, WEEKDAYS
 from .alarm_manager import async_remove_entry as am_async_remove_entry
 from .const import (
-    ATTR_ALARM_DATETIME,
-    ATTR_ALARM_NUMBER,
-    ATTR_ALARM_TYPE,
-    ATTR_ENABLED,
-    ATTR_NAME,
-    ATTR_TIME,
-    ATTR_WEEKDAYS,
     DOMAIN,
     LOGGER,
-    SERVICE_ADD_ALARM,
-    SERVICE_ADD_RECURRING_ALARM,
-    SERVICE_DISABLE_ALARM,
-    SERVICE_DELETE_ALARM,
-    SERVICE_DELETE_ALARM_BY_NUMBER,
-    SERVICE_DELETE_ALL_ALARMS,
-    SERVICE_ENABLE_ALARM,
-    SERVICE_SKIP_NEXT_ALARM,
-    SERVICE_UPDATE_ALARM,
-    SIGNAL_ADD_ALARM,
-    SIGNAL_DELETE_ALARM,
 )
 from .data import WakeUpAlarmData
-from .intents.delete_alarm_intent import DeleteAlarmIntent
-from .intents.delete_all_alarms_intent import DeleteAllAlarmsIntent
-from .intents.get_alarms_intent import GetAlarmsIntent
-from .intents.set_alarm_intent import SetAlarmIntent
 
 if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.core import HomeAssistant
     from homeassistant.helpers.typing import ConfigType
 
     from .data import WakeUpAlarmConfigEntry
@@ -66,64 +31,6 @@ PLATFORMS: list[Platform] = [
     Platform.SENSOR,
 ]
 
-DELETE_ALARM_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ENTITY_ID): cv.entity_ids,
-    }
-)
-
-DELETE_ALARM_BY_NUMBER_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ALARM_NUMBER): cv.positive_int,
-        # ATTR_DEVICE_ID is removed as per the requirement
-    }
-)
-
-DELETE_ALL_ALARMS_SERVICE_SCHEMA = vol.Schema({})
-
-ALARM_NUMBER_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ALARM_NUMBER): cv.positive_int,
-    }
-)
-
-ADD_ALARM_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ALARM_DATETIME): cv.datetime,
-        vol.Optional(ATTR_NAME): cv.string,
-        vol.Optional(ATTR_ENABLED, default=True): cv.boolean,
-    }
-)
-
-ADD_RECURRING_ALARM_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_TIME): cv.string,
-        vol.Required(ATTR_WEEKDAYS): vol.All(
-            cv.ensure_list,
-            [vol.In(WEEKDAYS)],
-        ),
-        vol.Optional(ATTR_NAME): cv.string,
-        vol.Optional(ATTR_ENABLED, default=True): cv.boolean,
-    }
-)
-
-UPDATE_ALARM_SERVICE_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_ALARM_NUMBER): cv.positive_int,
-        vol.Optional(ATTR_NAME): cv.string,
-        vol.Optional(ATTR_ENABLED): cv.boolean,
-        vol.Optional(ATTR_ALARM_DATETIME): cv.datetime,
-        vol.Optional(ATTR_TIME): cv.string,
-        vol.Optional(ATTR_WEEKDAYS): vol.All(
-            cv.ensure_list,
-            [vol.In(WEEKDAYS)],
-        ),
-        vol.Optional(ATTR_ALARM_TYPE): vol.In(
-            [ALARM_TYPE_ONE_TIME, ALARM_TYPE_RECURRING],
-        ),
-    }
-)
-
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the wake_up_alarm domain."""
@@ -131,112 +38,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
 
-    async def async_handle_delete_alarm_service(service_call: ServiceCall) -> None:
-        """Handle the service call to delete an alarm."""
-        entity_registry = er.async_get(hass)
-        target_entity_ids = service_call.data[ATTR_ENTITY_ID]
-
-        for entity_id_str in target_entity_ids:
-            entity_entry = entity_registry.async_get(entity_id_str)
-
-            if not entity_entry:
-                LOGGER.warning(
-                    "Cannot delete alarm: Entity ID %s not found.", entity_id_str
-                )
-                continue
-
-            if entity_entry.platform != DOMAIN:
-                LOGGER.warning(
-                    "Cannot delete alarm: Entity %s is not part of the %s domain.",
-                    entity_id_str,
-                    DOMAIN,
-                )
-                continue
-
-            if not entity_entry.config_entry_id:
-                LOGGER.warning(
-                    "Cannot delete alarm: Entity %s is not associated with a config.",
-                    entity_id_str,
-                )
-                continue
-
-            config_entry_id = entity_entry.config_entry_id
-            # Unique ID format: f"{config_entry_id}_alarm_{alarm_number}"
-            prefix = f"{config_entry_id}_alarm_"
-            if entity_entry.unique_id and entity_entry.unique_id.startswith(prefix):
-                try:
-                    alarm_number_str = entity_entry.unique_id[len(prefix) :]
-                    alarm_number = int(alarm_number_str)
-                    am = AlarmManager.get_instance(hass)
-                    if am:
-                        await am.delete_alarm(alarm_number)
-                except ValueError:
-                    LOGGER.warning(
-                        "Could not parse alarm_number from unique_id %s for entity %s",
-                        entity_entry.unique_id,
-                        entity_id_str,
-                    )
-            else:
-                LOGGER.warning(
-                    "Unique ID %s for entity %s does not match expected alarm format.",
-                    entity_entry.unique_id,
-                    entity_id_str,
-                )
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_DELETE_ALARM,
-        async_handle_delete_alarm_service,
-        schema=DELETE_ALARM_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_delete_alarm_by_number_service(
-        service_call: ServiceCall,
-    ) -> None:
-        """Handle the service call to delete an alarm by its number."""
-        alarm_number_to_delete = service_call.data[ATTR_ALARM_NUMBER]
-
-        config_entries_for_domain = hass.config_entries.async_entries(DOMAIN)
-
-        if not config_entries_for_domain:
-            LOGGER.warning(
-                "Cannot delete alarm by number %s: No config entries found for %s.",
-                alarm_number_to_delete,
-                DOMAIN,
-            )
-            return
-
-        dispatched_count = 0
-        for config_entry in config_entries_for_domain:
-            config_entry_id = config_entry.entry_id
-            alarm_details = {ATTR_ALARM_NUMBER: alarm_number_to_delete}
-            delete_signal = f"{SIGNAL_DELETE_ALARM}_{config_entry_id}"
-
-            LOGGER.debug(
-                "Dispatching delete signal %s for alarm number %s (config_entry: %s)",
-                delete_signal,
-                alarm_number_to_delete,
-                config_entry_id,
-            )
-            async_dispatcher_send(hass, delete_signal, alarm_details)
-            dispatched_count += 1
-
-        if dispatched_count > 0:
-            LOGGER.info(
-                "Delete signal for alarm number %s dispatched to %s instance(s) of %s.",
-                alarm_number_to_delete,
-                dispatched_count,
-                DOMAIN,
-            )
-        # If no instances had the alarm, the sensor platform's handler will silently
-        # ignore it or log appropriately.
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_DELETE_ALARM_BY_NUMBER,
-        async_handle_delete_alarm_by_number_service,
-        schema=DELETE_ALARM_BY_NUMBER_SERVICE_SCHEMA,
-    )
+    service_call_handlers.register(hass)
 
     return True
 
@@ -251,171 +53,13 @@ async def async_setup_entry(
         integration=async_get_loaded_integration(hass, entry.domain),
         alarm_entities={},  # Initialize alarm_entities dict
     )
+    intents.register(hass)
 
-    intent.async_register(hass, SetAlarmIntent())
-    intent.async_register(hass, GetAlarmsIntent())
-    intent.async_register(hass, DeleteAllAlarmsIntent())
-    intent.async_register(hass, DeleteAlarmIntent())
+    service_call_handlers.register_entry(hass, entry)
 
-    async def async_handle_add_alarm_service(service_call: ServiceCall) -> None:
-        """Handle the service call to add a new alarm."""
-        # cv.datetime ensures alarm_datetime_obj is a datetime object
-        local_alarm_datetime_obj = service_call.data[ATTR_ALARM_DATETIME]
-        utc_alarm_datetime_obj = dt_util.as_utc(local_alarm_datetime_obj)
+    entry.async_on_unload(service_call_handlers.unregister(hass))
 
-        LOGGER.info(
-            "Service call to add alarm: DateTime='%s' (UTC %s) for entry %s",
-            local_alarm_datetime_obj.isoformat(),
-            utc_alarm_datetime_obj.isoformat(),
-            entry.entry_id,
-        )
-
-        alarm_details = {
-            ATTR_ALARM_DATETIME: utc_alarm_datetime_obj,
-            ATTR_NAME: service_call.data.get(ATTR_NAME),
-            ATTR_ENABLED: service_call.data[ATTR_ENABLED],
-        }
-
-        # Dispatch a signal specific to this config entry
-        # The sensor platform for this entry will listen for this signal
-        entry_specific_signal = f"{SIGNAL_ADD_ALARM}_{entry.entry_id}"
-        async_dispatcher_send(hass, entry_specific_signal, alarm_details)
-
-    # Define the service schema
-
-    # Register the service
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ADD_ALARM,
-        async_handle_add_alarm_service,
-        schema=ADD_ALARM_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_add_recurring_alarm_service(
-        service_call: ServiceCall,
-    ) -> None:
-        """Handle the service call to add a new recurring alarm."""
-        alarm_details = {
-            ATTR_ALARM_TYPE: ALARM_TYPE_RECURRING,
-            ATTR_TIME: service_call.data[ATTR_TIME],
-            ATTR_WEEKDAYS: service_call.data[ATTR_WEEKDAYS],
-            ATTR_NAME: service_call.data.get(ATTR_NAME),
-            ATTR_ENABLED: service_call.data[ATTR_ENABLED],
-        }
-
-        entry_specific_signal = f"{SIGNAL_ADD_ALARM}_{entry.entry_id}"
-        async_dispatcher_send(hass, entry_specific_signal, alarm_details)
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ADD_RECURRING_ALARM,
-        async_handle_add_recurring_alarm_service,
-        schema=ADD_RECURRING_ALARM_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_update_alarm_service(service_call: ServiceCall) -> None:
-        """Handle the service call to update an existing alarm."""
-        am = AlarmManager.get_instance(hass)
-        if not am:
-            LOGGER.warning("Cannot update alarm: No instance of %s found.", DOMAIN)
-            return
-        alarm_number = service_call.data[ATTR_ALARM_NUMBER]
-        changes = dict(service_call.data)
-        del changes[ATTR_ALARM_NUMBER]
-        await am.update_alarm(alarm_number, **changes)
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_UPDATE_ALARM,
-        async_handle_update_alarm_service,
-        schema=UPDATE_ALARM_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_enable_alarm_service(service_call: ServiceCall) -> None:
-        """Handle the service call to enable an alarm."""
-        am = AlarmManager.get_instance(hass)
-        if not am:
-            LOGGER.warning("Cannot enable alarm: No instance of %s found.", DOMAIN)
-            return
-        await am.enable_alarm(service_call.data[ATTR_ALARM_NUMBER])
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_ENABLE_ALARM,
-        async_handle_enable_alarm_service,
-        schema=ALARM_NUMBER_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_disable_alarm_service(service_call: ServiceCall) -> None:
-        """Handle the service call to disable an alarm."""
-        am = AlarmManager.get_instance(hass)
-        if not am:
-            LOGGER.warning("Cannot disable alarm: No instance of %s found.", DOMAIN)
-            return
-        await am.disable_alarm(service_call.data[ATTR_ALARM_NUMBER])
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_DISABLE_ALARM,
-        async_handle_disable_alarm_service,
-        schema=ALARM_NUMBER_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_skip_next_alarm_service(service_call: ServiceCall) -> None:
-        """Handle the service call to skip the next alarm occurrence."""
-        am = AlarmManager.get_instance(hass)
-        if not am:
-            LOGGER.warning("Cannot skip alarm: No instance of %s found.", DOMAIN)
-            return
-        await am.skip_next_alarm(service_call.data[ATTR_ALARM_NUMBER])
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SKIP_NEXT_ALARM,
-        async_handle_skip_next_alarm_service,
-        schema=ALARM_NUMBER_SERVICE_SCHEMA,
-    )
-
-    async def async_handle_delete_all_alarms_service(service_call: ServiceCall) -> None:
-        """Handle the service call to delete all alarms across all instances."""
-        del service_call  # Unused
-        am = AlarmManager.get_instance(hass)
-        if not am:
-            LOGGER.warning("Cannot delete all alarms: No instance of %s found.", DOMAIN)
-            return
-        await am.delete_all_alarms()
-
-    LOGGER.info(
-        "Registering service %s for deleting all alarms.", SERVICE_DELETE_ALL_ALARMS
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_DELETE_ALL_ALARMS,
-        async_handle_delete_all_alarms_service,
-        schema=DELETE_ALL_ALARMS_SERVICE_SCHEMA,
-    )
-
-    # Ensure service is removed on unload
-    def _unregister_services() -> None:
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_ADD_RECURRING_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_UPDATE_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_ENABLE_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_DISABLE_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_SKIP_NEXT_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALARM)
-        hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALARM_BY_NUMBER)
-        hass.services.async_remove(DOMAIN, SERVICE_DELETE_ALL_ALARMS)
-
-    entry.async_on_unload(_unregister_services)
-
-    def _unregister_intents() -> None:
-        intent.async_remove(hass, SetAlarmIntent().intent_type)
-        intent.async_remove(hass, GetAlarmsIntent().intent_type)
-        intent.async_remove(hass, DeleteAllAlarmsIntent().intent_type)
-        intent.async_remove(hass, DeleteAlarmIntent().intent_type)
-
-    entry.async_on_unload(_unregister_intents)
+    intents.unregister(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

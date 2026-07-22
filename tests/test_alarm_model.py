@@ -6,8 +6,7 @@ import unittest
 from datetime import UTC, datetime
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-
-from typing_extensions import Any
+from typing import Any
 
 _ALARM_MODEL_PATH = (
     Path(__file__).resolve().parents[1]
@@ -17,8 +16,8 @@ _ALARM_MODEL_PATH = (
 )
 
 _SPEC = spec_from_file_location("alarm_model", _ALARM_MODEL_PATH)
-assert _SPEC is not None
-assert _SPEC.loader is not None
+assert _SPEC is not None  # noqa: S101
+assert _SPEC.loader is not None  # noqa: S101
 alarm_model = module_from_spec(_SPEC)
 _SPEC.loader.exec_module(alarm_model)
 
@@ -205,9 +204,10 @@ class AlarmModelTest(unittest.TestCase):
     def test_create_recurring_alarm_returns_normalized_data(self) -> None:
         """Recurring alarm creation returns normalized alarm data."""
         now = datetime.fromisoformat("2026-05-19T06:00:00+02:00")
+        expected_number = 2
 
         alarm = create_recurring_alarm(
-            2,
+            expected_number,
             "07:00:00",
             ["mon", "tue", "wed", "thu", "fri"],
             name="Work alarm",
@@ -215,8 +215,8 @@ class AlarmModelTest(unittest.TestCase):
             now=now,
         )
 
-        if alarm["number"] != 2:
-            err_msg = f"Expected number to be 2, got {alarm['number']}"
+        if alarm["number"] != expected_number:
+            err_msg = f"Expected number to be {expected_number}, got {alarm['number']}"
             raise AssertionError(err_msg)
 
         if alarm["name"] != "Work alarm":
@@ -235,8 +235,9 @@ class AlarmModelTest(unittest.TestCase):
             err_msg = f"Expected time to be '07:00:00', got {alarm['time']}"
             raise AssertionError(err_msg)
 
-        if alarm["weekdays"] != ["mon", "tue", "wed", "thu", "fri"]:
-            err_msg = f"Expected weekdays to be ['mon', 'tue', 'wed', 'thu', 'fri'], got {alarm['weekdays']}"
+        expected = ["mon", "tue", "wed", "thu", "fri"]
+        if alarm["weekdays"] != expected:
+            err_msg = f"Expected weekdays to be {expected}, got {alarm['weekdays']}"
             raise AssertionError(err_msg)
 
         expected = datetime.fromisoformat("2026-05-19T07:00:00+02:00")
@@ -247,9 +248,10 @@ class AlarmModelTest(unittest.TestCase):
     def test_create_disabled_recurring_alarm_has_no_next_run(self) -> None:
         """Disabled recurring alarms are stored without a next run."""
         now = datetime.fromisoformat("2026-05-19T06:00:00+02:00")
+        expected_number = 2
 
         alarm = create_recurring_alarm(
-            2,
+            expected_number,
             "07:00:00",
             ["mon", "tue"],
             enabled=False,
@@ -257,8 +259,8 @@ class AlarmModelTest(unittest.TestCase):
             now=now,
         )
 
-        if alarm["number"] != 2:
-            err_msg = f"Expected number to be 2, got {alarm['number']}"
+        if alarm["number"] != expected_number:
+            err_msg = f"Expected number to be {expected_number}, got {alarm['number']}"
             raise AssertionError(err_msg)
 
         if alarm["name"] != "":

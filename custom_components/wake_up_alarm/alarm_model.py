@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
@@ -9,6 +10,19 @@ ALARM_TYPE_ONE_TIME = "one_time"
 ALARM_TYPE_RECURRING = "recurring"
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WEEKDAY_TO_INDEX = {weekday: index for index, weekday in enumerate(WEEKDAYS)}
+
+
+@dataclass
+class RecurringAlarmData:
+    """Store data used when creating a recurring alarm."""
+
+    alarm_number: int
+    time_value: str
+    weekdays: list[str]
+    name: str | None = None
+    enabled: bool = True
+    created_at: datetime | None = None
+    now: datetime | None = None
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -135,32 +149,32 @@ def calculate_next_recurring_run(
     raise ValueError(msg)
 
 
-def create_recurring_alarm(
-    alarm_number: int,
-    time_value: str,
-    weekdays: list[str],
-    *,
-    name: str | None = None,
-    enabled: bool = True,
-    created_at: datetime | None = None,
-    now: datetime,
-) -> dict[str, Any]:
+def create_recurring_alarm(recurring_alarm_data: RecurringAlarmData) -> dict[str, Any]:
     """Create normalized recurring alarm data."""
-    normalized_weekdays = _normalize_weekdays(weekdays)
-    created_at_utc = created_at.astimezone(UTC) if created_at else None
+    normalized_weekdays = _normalize_weekdays(recurring_alarm_data.weekdays)
+    created_at_utc = (
+        recurring_alarm_data.created_at.astimezone(UTC)
+        if recurring_alarm_data.created_at
+        else None
+    )
     next_run = (
-        calculate_next_recurring_run(time_value, normalized_weekdays, now=now)
-        if enabled
+        calculate_next_recurring_run(
+            recurring_alarm_data.time_value,
+            normalized_weekdays,
+            now=recurring_alarm_data.now or datetime.now(UTC),
+        )
+        if recurring_alarm_data.enabled
         else None
     )
 
     return {
-        "number": alarm_number,
-        "name": name or f"Alarm {alarm_number}",
+        "number": recurring_alarm_data.alarm_number,
+        "name": recurring_alarm_data.name
+        or f"Alarm {recurring_alarm_data.alarm_number}",
         "type": ALARM_TYPE_RECURRING,
-        "enabled": enabled,
+        "enabled": recurring_alarm_data.enabled,
         "datetime_obj": None,
-        "time": time_value,
+        "time": recurring_alarm_data.time_value,
         "weekdays": normalized_weekdays,
         "next_run": next_run,
         "created_at": created_at_utc,
