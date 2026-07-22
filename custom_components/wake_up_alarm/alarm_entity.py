@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import (
-    SensorDeviceClass,
     SensorEntity,
 )
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -26,9 +25,6 @@ class AlarmEntity(WakeUpAlarmEntity, SensorEntity):
     """AlarmEntity class representing a single alarm as a sensor."""
 
     _attr_icon = "mdi:alarm"  # Example icon
-    _attr_device_class = (
-        SensorDeviceClass.TIMESTAMP
-    )  # Set device class for proper display
 
     def __init__(
         self,
@@ -36,6 +32,7 @@ class AlarmEntity(WakeUpAlarmEntity, SensorEntity):
         entry: WakeUpAlarmConfigEntry,
         alarm_number: int,
         alarm_datetime_utc: datetime,
+        alarm_data: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the alarm entity."""
         super().__init__()
@@ -57,9 +54,12 @@ class AlarmEntity(WakeUpAlarmEntity, SensorEntity):
             self._alarm_at = alarm_datetime_utc
 
         self._alarm_number = alarm_number
+        self._alarm_data = alarm_data
         self._entry_id = entry.entry_id
 
-        self._attr_name = f"Alarm {self._alarm_number}"
+        self._attr_name = (
+            self._alarm_data["name"] if self._alarm_data else f"Alarm {alarm_number}"
+        )
         self._attr_unique_id = f"{self._entry_id}_alarm_{self._alarm_number}"
 
         self._attr_device_info = DeviceInfo(
@@ -76,6 +76,37 @@ class AlarmEntity(WakeUpAlarmEntity, SensorEntity):
         return self._alarm_number
 
     @property
-    def native_value(self) -> datetime:
+    def native_value(self) -> datetime | str | None:
         """Return the state of the sensor (the alarm time in ISO format)."""
+        if self._alarm_data:
+            if not self._alarm_data["enabled"]:
+                return "disabled"
+            return self._alarm_data["next_run"]
         return self._alarm_at  # This is already UTC
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return alarm details as entity attributes."""
+        if not self._alarm_data:
+            return {
+                "alarm_number": self._alarm_number,
+                "datetime": self._alarm_at.isoformat(),
+                "next_run": self._alarm_at.isoformat(),
+            }
+
+        datetime_obj = self._alarm_data.get("datetime_obj")
+        next_run = self._alarm_data.get("next_run")
+        created_at = self._alarm_data.get("created_at")
+
+        return {
+            "alarm_number": self._alarm_number,
+            "name": self._alarm_data["name"],
+            "type": self._alarm_data["type"],
+            "enabled": self._alarm_data["enabled"],
+            "datetime": datetime_obj.isoformat() if datetime_obj else None,
+            "time": self._alarm_data.get("time"),
+            "weekdays": list(self._alarm_data.get("weekdays") or []),
+            "next_run": next_run.isoformat() if next_run else None,
+            "created_at": created_at.isoformat() if created_at else None,
+            "skip_next": self._alarm_data.get("skip_next", False),
+        }

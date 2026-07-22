@@ -11,6 +11,158 @@ add_alarm:
       example: "2024-07-15T08:00:00"
       selector:
         datetime:
+    name:
+      name: Name
+      description: Optional alarm name.
+      required: false
+      example: Dentist
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Whether the alarm should be enabled immediately.
+      required: false
+      default: true
+      selector:
+        boolean:
+add_recurring_alarm:
+  name: Add Recurring Alarm
+  description: Adds a recurring weekly alarm.
+  fields:
+    name:
+      name: Name
+      description: Optional alarm name.
+      required: false
+      example: Work alarm
+      selector:
+        text:
+    time:
+      name: Time
+      description: The time of day for the alarm.
+      required: true
+      example: "07:00:00"
+      selector:
+        time:
+    weekdays:
+      name: Weekdays
+      description: Weekdays on which the alarm should fire.
+      required: true
+      example:
+        - mon
+        - tue
+        - wed
+        - thu
+        - fri
+      selector:
+        select:
+          multiple: true
+          options:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+    enabled:
+      name: Enabled
+      description: Whether the alarm should be enabled immediately.
+      required: false
+      default: true
+      selector:
+        boolean:
+update_alarm:
+  name: Update Alarm
+  description: Updates an existing alarm and recalculates its next run.
+  fields:
+    alarm_number:
+      name: Alarm Number
+      description: The number of the alarm to update.
+      required: true
+      example: 2
+      selector:
+        number:
+    name:
+      name: Name
+      description: Optional alarm name.
+      required: false
+      selector:
+        text:
+    enabled:
+      name: Enabled
+      description: Whether the alarm should be enabled.
+      required: false
+      selector:
+        boolean:
+    datetime:
+      name: Alarm Datetime
+      description: Date and time for a one-time alarm.
+      required: false
+      selector:
+        datetime:
+    time:
+      name: Time
+      description: Time of day for a recurring alarm.
+      required: false
+      selector:
+        time:
+    weekdays:
+      name: Weekdays
+      description: Weekdays on which a recurring alarm should fire.
+      required: false
+      selector:
+        select:
+          multiple: true
+          options:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+    type:
+      name: Type
+      description: Alarm type.
+      required: false
+      selector:
+        select:
+          options:
+            - one_time
+            - recurring
+enable_alarm:
+  name: Enable Alarm
+  description: Enables an alarm and schedules its next run.
+  fields:
+    alarm_number:
+      name: Alarm Number
+      description: The number of the alarm to enable.
+      required: true
+      example: 2
+      selector:
+        number:
+disable_alarm:
+  name: Disable Alarm
+  description: Disables an alarm and cancels its scheduled callback.
+  fields:
+    alarm_number:
+      name: Alarm Number
+      description: The number of the alarm to disable.
+      required: true
+      example: 2
+      selector:
+        number:
+skip_next_alarm:
+  name: Skip Next Alarm
+  description: Skips the next scheduled occurrence of a recurring alarm.
+  fields:
+    alarm_number:
+      name: Alarm Number
+      description: The number of the alarm to skip.
+      required: true
+      example: 2
+      selector:
+        number:
 delete_alarm:
   target:
   name: Delete Alarm

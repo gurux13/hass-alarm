@@ -13,10 +13,27 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .alarm_entity import AlarmEntity
+from .alarm_model import (
+    ALARM_TYPE_ONE_TIME,
+    ALARM_TYPE_RECURRING,
+    calculate_next_recurring_run,
+    create_one_time_alarm,
+    normalize_alarm,
+    serialize_alarm,
+)
+from .alarm_model import (
+    create_recurring_alarm as create_recurring_alarm_data,
+)
 from .alarm_sensor import IsAlarmSensor
 from .all_alarms_sensor import AllAlarmsSensor
 from .const import (
     ATTR_ALARM_DATETIME,
+    ATTR_ALARM_TYPE,
+    ATTR_ENABLED,
+    ATTR_NAME,
+    ATTR_TIME,
+    ATTR_WEEKDAYS,
+    EVENT_ALARM_FIRED,
     EVENT_ALARM_TRIGGERED,
     HASS_DATA_ALARM_MANAGER,
     LOGGER,
@@ -96,21 +113,32 @@ async def async_setup_entry(
         This creates an individual AlarmEntity sensor, adds the alarm to the
         AlarmManager (which handles persistence), and updates the summary sensor.
         """
-        alarm_datetime_utc: datetime = alarm_details[ATTR_ALARM_DATETIME]
-
-        new_alarm_entity = alarm_manager.create_alarm(alarm_datetime_utc)
+        if alarm_details.get(ATTR_ALARM_TYPE) == ALARM_TYPE_RECURRING:
+            new_alarm_entity = alarm_manager.create_recurring_alarm(
+                alarm_details[ATTR_TIME],
+                alarm_details[ATTR_WEEKDAYS],
+                name=alarm_details.get(ATTR_NAME),
+                enabled=alarm_details.get(ATTR_ENABLED, True),
+            )
+        else:
+            alarm_datetime_utc: datetime = alarm_details[ATTR_ALARM_DATETIME]
+            new_alarm_entity = alarm_manager.create_alarm(
+                alarm_datetime_utc,
+                name=alarm_details.get(ATTR_NAME),
+                enabled=alarm_details.get(ATTR_ENABLED, True),
+            )
 
         if new_alarm_entity is None:
             LOGGER.error(
-                "Failed to create alarm entity via AlarmManager for datetime %s",
-                alarm_datetime_utc.isoformat(),
+                "Failed to create alarm entity via AlarmManager for %s",
+                alarm_details,
             )
             return
 
         LOGGER.debug(
-            ("Sensor platform received new alarm entity: Number=%s, DateTime='%s'"),
+            "Sensor platform received new alarm entity: Number=%s, Value='%s'",
             new_alarm_entity.alarm_number,
-            new_alarm_entity.native_value.isoformat(),
+            new_alarm_entity.native_value,
         )
 
         # Add the entity to Home Assistant
@@ -125,8 +153,7 @@ async def async_setup_entry(
     @callback
     async def _async_handle_delete_alarm_signal(alarm_details: dict[str, Any]) -> None:
         """Handle the signal to delete an alarm from a service call."""
-        del alarm_details  # Unused
-        await alarm_manager.delete_all_alarms()
+        await alarm_manager.delete_alarm(alarm_details["alarm_number"])
 
         all_alarms_summary_sensor.async_write_ha_state()
 
@@ -202,7 +229,7 @@ class AlarmManager:
         self.hass = hass
         self._entry = entry
         self._entry_id = entry.entry_id
-        # _alarms stores {"number": int, "datetime_obj": datetime}
+        # _alarms stores normalized alarm dictionaries. See alarm_model.py.
         self._alarms: list[dict[str, Any]] = []
         self._free_alarm_numbers: set[int] = set()
 
@@ -248,8 +275,14 @@ class AlarmManager:
         """Get the next alarm time, or None if no alarms are set."""
         if not self._alarms:
             return None
-        # Return the earliest alarm datetime
-        return min(alarm["datetime_obj"] for alarm in self._alarms)
+        enabled_alarm_times = [
+            alarm["next_run"]
+            for alarm in self._alarms
+            if alarm["enabled"] and alarm["next_run"] is not None
+        ]
+        if not enabled_alarm_times:
+            return None
+        return min(enabled_alarm_times)
 
     async def async_load_alarms(self) -> None:
         """Load alarms from the store."""
@@ -260,37 +293,16 @@ class AlarmManager:
         loaded_alarms: list[dict[str, Any]] = []
         for alarm_raw in stored_alarms_raw:
             try:
-                if not all(k in alarm_raw for k in ("number", "datetime")):
+                if "number" not in alarm_raw:
                     LOGGER.warning("Skipping malformed alarm data: %s", alarm_raw)
                     continue
-                if not isinstance(alarm_raw["number"], int) or not isinstance(
-                    alarm_raw["datetime"], str
-                ):
+                if not isinstance(alarm_raw["number"], int):
                     LOGGER.warning(
                         "Skipping alarm data with incorrect types: %s", alarm_raw
                     )
                     continue
 
-                parsed_datetime_raw = dt_util.parse_datetime(alarm_raw["datetime"])
-                if parsed_datetime_raw is None:
-                    LOGGER.warning(
-                        "Could not parse datetime string for alarm: %s", alarm_raw
-                    )
-                    continue
-
-                if parsed_datetime_raw.tzinfo is None:
-                    LOGGER.warning(
-                        "Alarm datetime '%s' for number %s is no tz, assuming UTC.",
-                        alarm_raw["datetime"],
-                        alarm_raw["number"],
-                    )
-                    parsed_datetime = parsed_datetime_raw.replace(tzinfo=dt_util.UTC)
-                else:
-                    parsed_datetime = dt_util.as_utc(parsed_datetime_raw)
-
-                loaded_alarms.append(
-                    {"number": alarm_raw["number"], "datetime_obj": parsed_datetime}
-                )
+                loaded_alarms.append(normalize_alarm(alarm_raw))
             except (TypeError, ValueError) as ex:
                 LOGGER.warning("Could not parse stored alarm %s: %s", alarm_raw, ex)
 
@@ -326,7 +338,11 @@ class AlarmManager:
 
     @callback
     def _create_alarm_data_and_persist(
-        self, alarm_datetime: datetime
+        self,
+        alarm_datetime: datetime,
+        *,
+        name: str | None = None,
+        enabled: bool = True,
     ) -> dict[str, Any] | None:
         """
         Create data for a new alarm, add it to internal list, and schedule a save.
@@ -336,32 +352,49 @@ class AlarmManager:
         """
         alarm_number = self.get_next_alarm_number()
 
-        if self.add_alarm_data(alarm_number, alarm_datetime):
+        if self.add_alarm_data(
+            alarm_number,
+            alarm_datetime,
+            name=name,
+            enabled=enabled,
+        ):
             LOGGER.debug(
                 "Alarm %s created in manager with datetime %s.",
                 alarm_number,
                 alarm_datetime.isoformat(),  # Log the input datetime for clarity
             )
-            return {
-                "number": alarm_number,
-                "datetime_obj": alarm_datetime,
-            }
+            return self.get_alarm(alarm_number)
         return None
 
     @callback
-    def create_alarm(self, alarm_datetime_utc: datetime) -> AlarmEntity | None:
+    def create_alarm(
+        self,
+        alarm_datetime_utc: datetime,
+        *,
+        name: str | None = None,
+        enabled: bool = True,
+    ) -> AlarmEntity | None:
         """Create alarm e2e."""
-        created_alarm_data = self._create_alarm_data_and_persist(alarm_datetime_utc)
+        created_alarm_data = self._create_alarm_data_and_persist(
+            alarm_datetime_utc,
+            name=name,
+            enabled=enabled,
+        )
 
         if created_alarm_data:
             alarm_number = created_alarm_data["number"]
             actual_alarm_datetime_utc = created_alarm_data["datetime_obj"]
             alarm_entity = AlarmEntity(
-                self.hass, self._entry, alarm_number, actual_alarm_datetime_utc
+                self.hass,
+                self._entry,
+                alarm_number,
+                actual_alarm_datetime_utc,
+                created_alarm_data,
             )
-            self._async_schedule_alarm_event_trigger(
-                alarm_number, actual_alarm_datetime_utc
-            )
+            if enabled:
+                self._async_schedule_alarm_event_trigger(
+                    alarm_number, actual_alarm_datetime_utc
+                )
             return alarm_entity
         return None
 
@@ -377,12 +410,14 @@ class AlarmManager:
                 self.hass,
                 self._entry,
                 alarm_data["number"],
-                alarm_data["datetime_obj"],
+                alarm_data["next_run"] or dt_util.utcnow(),
+                alarm_data,
             )
             created_entities.append(alarm_entity)
-            self._async_schedule_alarm_event_trigger(
-                alarm_data["number"], alarm_data["datetime_obj"]
-            )
+            if alarm_data["enabled"] and alarm_data["next_run"] is not None:
+                self._async_schedule_alarm_event_trigger(
+                    alarm_data["number"], alarm_data["next_run"]
+                )
         return created_entities
 
     @callback
@@ -394,24 +429,54 @@ class AlarmManager:
         @callback
         async def _fire_alarm_event_callback(_now: datetime) -> None:
             """Execute callback when alarm time is reached."""
+            alarm = self.get_alarm(alarm_number)
+            if alarm is None:
+                LOGGER.warning("Triggered alarm %s no longer exists.", alarm_number)
+                return
+
             LOGGER.info(
                 "Alarm %s for entry %s triggered (scheduled for %s)",
                 alarm_number,
                 self._entry_id,
                 alarm_datetime_utc.isoformat(),
             )
+            entity = self._entry.runtime_data.alarm_entities.get(alarm_number)
+            entity_id = entity.entity_id if entity else None
+            event_data = {
+                "config_entry_id": self._entry_id,
+                "alarm_number": alarm_number,
+                "entity_id": entity_id,
+                "name": alarm["name"],
+                "type": alarm["type"],
+                "scheduled_time": alarm_datetime_utc.isoformat(),
+                "alarm_datetime": alarm_datetime_utc.isoformat(),
+            }
+            self.hass.bus.async_fire(EVENT_ALARM_FIRED, event_data)
             self.hass.bus.async_fire(
                 EVENT_ALARM_TRIGGERED,
-                {
-                    "config_entry_id": self._entry_id,
-                    "alarm_number": alarm_number,
-                    "alarm_datetime": alarm_datetime_utc.isoformat(),
-                },
+                event_data,
             )
             self.trigger_is_alarming_sensor()
-            await self.delete_alarm(alarm_number)  # Remove alarm after firing
             if alarm_number in self._entry.runtime_data.scheduled_alarm_triggers:
                 del self._entry.runtime_data.scheduled_alarm_triggers[alarm_number]
+            if alarm["type"] == ALARM_TYPE_RECURRING:
+                alarm["next_run"] = calculate_next_recurring_run(
+                    alarm["time"],
+                    alarm["weekdays"],
+                    now=dt_util.now(),
+                )
+                alarm["skip_next"] = False
+                self.hass.async_create_task(self._async_save_alarms_to_store())
+                if entity:
+                    entity.async_write_ha_state()
+                self._async_schedule_alarm_event_trigger(
+                    alarm_number,
+                    alarm["next_run"],
+                )
+                self.refresh_sensor()
+                return
+
+            await self.delete_alarm(alarm_number)  # Remove one-time alarm after firing
 
         if alarm_datetime_utc <= dt_util.utcnow():
             LOGGER.debug(
@@ -437,7 +502,14 @@ class AlarmManager:
         )
 
     @callback
-    def add_alarm_data(self, alarm_number: int, alarm_datetime: datetime) -> bool:
+    def add_alarm_data(
+        self,
+        alarm_number: int,
+        alarm_datetime: datetime,
+        *,
+        name: str | None = None,
+        enabled: bool = True,
+    ) -> bool:
         """Add an alarm and update internal list. Returns True if successful."""
         alarm_datetime_utc = alarm_datetime.astimezone(UTC)
 
@@ -449,7 +521,13 @@ class AlarmManager:
             return False
 
         self._alarms.append(
-            {"number": alarm_number, "datetime_obj": alarm_datetime_utc}
+            create_one_time_alarm(
+                alarm_number,
+                alarm_datetime_utc,
+                name=name,
+                enabled=enabled,
+                created_at=dt_util.utcnow(),
+            )
         )
         if alarm_number in self._free_alarm_numbers:
             self._free_alarm_numbers.remove(alarm_number)
@@ -461,6 +539,59 @@ class AlarmManager:
         )
         self.hass.async_create_task(self._async_save_alarms_to_store())
         return True
+
+    @callback
+    def create_recurring_alarm(
+        self,
+        time_value: str,
+        weekdays: list[str],
+        *,
+        name: str | None = None,
+        enabled: bool = True,
+    ) -> AlarmEntity | None:
+        """Create recurring alarm e2e."""
+        alarm_number = self.get_next_alarm_number()
+
+        if any(alarm["number"] == alarm_number for alarm in self._alarms):
+            LOGGER.warning(
+                "Attempted to add alarm with duplicate number %s. Skipping.",
+                alarm_number,
+            )
+            return None
+
+        alarm_data = create_recurring_alarm_data(
+            alarm_number,
+            time_value,
+            weekdays,
+            name=name,
+            enabled=enabled,
+            created_at=dt_util.utcnow(),
+            now=dt_util.now(),
+        )
+        self._alarms.append(alarm_data)
+        if alarm_number in self._free_alarm_numbers:
+            self._free_alarm_numbers.remove(alarm_number)
+
+        LOGGER.debug(
+            "Recurring alarm %s added. Total alarms: %s. Scheduling save.",
+            alarm_number,
+            len(self._alarms),
+        )
+        self.hass.async_create_task(self._async_save_alarms_to_store())
+
+        alarm_entity = AlarmEntity(
+            self.hass,
+            self._entry,
+            alarm_number,
+            alarm_data["next_run"] or dt_util.utcnow(),
+            alarm_data,
+        )
+        if alarm_data["enabled"] and alarm_data["next_run"] is not None:
+            self._async_schedule_alarm_event_trigger(
+                alarm_number,
+                alarm_data["next_run"],
+            )
+        return alarm_entity
 
     @callback
     def _async_cancel_scheduled_alarm_trigger(self, alarm_number: int) -> None:
@@ -479,6 +610,110 @@ class AlarmManager:
                 alarm_number,
                 self._entry_id,
             )
+
+    def _recalculate_alarm_next_run(
+        self,
+        alarm: dict[str, Any],
+        *,
+        skip_current: bool = False,
+    ) -> None:
+        """Recalculate the next run for a normalized alarm."""
+        if not alarm["enabled"]:
+            alarm["next_run"] = None
+            return
+
+        if alarm["type"] == ALARM_TYPE_RECURRING:
+            alarm["next_run"] = calculate_next_recurring_run(
+                alarm["time"],
+                alarm["weekdays"],
+                now=dt_util.now(),
+                skip_current=skip_current,
+            )
+            return
+
+        alarm["next_run"] = alarm["datetime_obj"]
+
+    def _reschedule_alarm(self, alarm: dict[str, Any]) -> None:
+        """Cancel and recreate the scheduled callback for an alarm."""
+        alarm_number = alarm["number"]
+        self._async_cancel_scheduled_alarm_trigger(alarm_number)
+        if alarm["enabled"] and alarm["next_run"] is not None:
+            self._async_schedule_alarm_event_trigger(alarm_number, alarm["next_run"])
+
+    def _write_alarm_entity_state(self, alarm_number: int) -> None:
+        """Refresh one alarm entity and the summary sensor."""
+        entity = self._entry.runtime_data.alarm_entities.get(alarm_number)
+        if entity:
+            entity.async_write_ha_state()
+        self.refresh_sensor()
+
+    async def enable_alarm(self, alarm_number: int) -> bool:
+        """Enable an alarm and schedule its next run."""
+        alarm = self.get_alarm(alarm_number)
+        if alarm is None:
+            return False
+        alarm["enabled"] = True
+        self._recalculate_alarm_next_run(alarm)
+        self._reschedule_alarm(alarm)
+        await self._async_save_alarms_to_store()
+        self._write_alarm_entity_state(alarm_number)
+        return True
+
+    async def disable_alarm(self, alarm_number: int) -> bool:
+        """Disable an alarm and cancel its scheduled callback."""
+        alarm = self.get_alarm(alarm_number)
+        if alarm is None:
+            return False
+        alarm["enabled"] = False
+        alarm["next_run"] = None
+        self._async_cancel_scheduled_alarm_trigger(alarm_number)
+        await self._async_save_alarms_to_store()
+        self._write_alarm_entity_state(alarm_number)
+        return True
+
+    async def skip_next_alarm(self, alarm_number: int) -> bool:
+        """Skip the next occurrence of a recurring alarm."""
+        alarm = self.get_alarm(alarm_number)
+        if alarm is None or alarm["type"] != ALARM_TYPE_RECURRING:
+            return False
+        alarm["skip_next"] = True
+        self._recalculate_alarm_next_run(alarm, skip_current=True)
+        alarm["skip_next"] = False
+        self._reschedule_alarm(alarm)
+        await self._async_save_alarms_to_store()
+        self._write_alarm_entity_state(alarm_number)
+        return True
+
+    async def update_alarm(self, alarm_number: int, **changes: Any) -> bool:
+        """Update an existing alarm and reschedule it."""
+        alarm = self.get_alarm(alarm_number)
+        if alarm is None:
+            return False
+
+        if ATTR_NAME in changes:
+            alarm["name"] = changes[ATTR_NAME]
+        if ATTR_ENABLED in changes:
+            alarm["enabled"] = changes[ATTR_ENABLED]
+        if ATTR_ALARM_TYPE in changes:
+            alarm["type"] = changes[ATTR_ALARM_TYPE]
+        if ATTR_ALARM_DATETIME in changes:
+            alarm["datetime_obj"] = dt_util.as_utc(changes[ATTR_ALARM_DATETIME])
+        if ATTR_TIME in changes:
+            alarm["time"] = changes[ATTR_TIME]
+        if ATTR_WEEKDAYS in changes:
+            alarm["weekdays"] = list(changes[ATTR_WEEKDAYS])
+
+        if alarm["type"] == ALARM_TYPE_ONE_TIME:
+            alarm["time"] = None
+            alarm["weekdays"] = []
+        else:
+            alarm["datetime_obj"] = None
+
+        self._recalculate_alarm_next_run(alarm)
+        self._reschedule_alarm(alarm)
+        await self._async_save_alarms_to_store()
+        self._write_alarm_entity_state(alarm_number)
+        return True
 
     @callback
     async def delete_all_alarms(self) -> int:
@@ -548,8 +783,5 @@ class AlarmManager:
         LOGGER.debug(
             "Saving %s alarms to store for %s", len(self._alarms), self._entry_id
         )
-        data_to_save = [
-            {"number": alarm["number"], "datetime": alarm["datetime_obj"].isoformat()}
-            for alarm in self._alarms
-        ]
+        data_to_save = [serialize_alarm(alarm) for alarm in self._alarms]
         await self._store.async_save(data_to_save)
